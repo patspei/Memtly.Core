@@ -25,3 +25,9 @@
 /wwwroot/dist
 /Memtly.Core/node_modules
 /Memtly.Core/wwwroot/dist
+
+**/.idea/
+.env
+.env.*
+!.env.example
+**/TestResults/
