@@ -78,7 +78,8 @@ namespace Memtly.Core.Constants
         public static IDictionary<string, string> ThumbnailStyleOption = new Dictionary<string, string>()
         {
             { "Tile", ((int)ThumbnailStyle.Tile).ToString() },
-            { "Letterbox", ((int)ThumbnailStyle.Letterbox).ToString() }
+            { "Letterbox", ((int)ThumbnailStyle.Letterbox).ToString() },
+            { "Masonry", ((int)ThumbnailStyle.Masonry).ToString() }
         };
 
         public static IDictionary<string, string> PaginationStyleOption = new Dictionary<string, string>()

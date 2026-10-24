@@ -35,7 +35,7 @@
     }
     catch { }
 
-    if (columnCount == 1)
+    if (Model?.ViewMode == ViewMode.Single || (columnCount == 1 && thumbnailStyle != ThumbnailStyle.Masonry))
     {
         thumbnailStyle = ThumbnailStyle.Single;
     }

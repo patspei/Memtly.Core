@@ -1,0 +1,64 @@
+/* Only gallery grids explicitly configured as Masonry use these rules. */
+.image-container.image-container-masonry {
+    --masonry-gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row;
+    align-items: start;
+    gap: var(--masonry-gap);
+}
+
+@media (min-width: 768px) {
+    .image-container.image-container-masonry {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    .image-container.image-container-masonry {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* Fine tracks avoid visible rounding gaps. Without JS, ordinary rows remain
+   usable with full images, rather than overlapping one-pixel-high cards. */
+.image-container.image-container-masonry[data-masonry-ready] {
+    grid-auto-rows: var(--masonry-track-size, 1px);
+    row-gap: 0;
+}
+
+.image-container.image-container-masonry > .media-viewer-card.image-tile {
+    display: block;
+    min-width: 0;
+    grid-column-end: span 1;
+    grid-row-end: auto;
+    align-self: start;
+}
+
+.image-container.image-container-masonry > .image-tile > .media-viewer-item {
+    display: block;
+    position: relative;
+}
+
+.image-container.image-container-masonry > .image-tile > .media-viewer-item > img {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    /* The square is only a lazy-loading placeholder; intrinsic dimensions win
+       as soon as the thumbnail or its existing error fallback becomes available. */
+    aspect-ratio: auto 1;
+    object-fit: contain;
+}
+
+.image-container.image-container-masonry .media-viewer-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20%;
+    height: auto;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    opacity: 1;
+}

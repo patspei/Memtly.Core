@@ -595,6 +595,9 @@ class MediaViewer {
         $('.media-viewer-item .media-viewer-play').each(function () {
             const element = $(this);
             const preview = element.parent();
+            // Masonry keeps intrinsic preview heights and centers the overlay in
+            // CSS, including after resize. Do not freeze the anchor's height.
+            if (preview.closest('.image-container-masonry').length) return;
             let thumbnail = $(preview.find('img')[0]);
 
             let adjustSizeFn = function () {

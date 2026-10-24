@@ -4,6 +4,7 @@
   "description": "A place for guests to view and drop pictures of the big day",
   "main": "index.js",
   "scripts": {
+    "test": "node --test tests/masonry.test.mjs",
     "development": "webpack --mode development",
     "production": "webpack --mode production",
     "watch": "webpack --mode development --watch"

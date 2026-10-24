@@ -4,6 +4,7 @@
     {
         Tile = 1,
         Letterbox = 2,
-        Single = 3
+        Single = 3,
+        Masonry = 4
     }
 }

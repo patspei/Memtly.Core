@@ -9,6 +9,7 @@ import Slideshow from '@modules/slideshow';
 import { default as initSettings } from '@pages/account/partials/settings';
 import { bindCollectionSettingsButton, bindGallerySettingsButton } from '@pages/account/partials/gallery'
 import { getQueryParam } from '@utilities/urls';
+import GalleryMasonry from '@modules/gallery-masonry';
 
 let resizeTimeout = null;
 let idleTimeout = null;
@@ -16,6 +17,7 @@ let searchTimeout = null;
 
 let mediaViewer = null;
 let slideshow = null;
+let masonry = null;
 
 let isPageLoading = false;
 
@@ -31,8 +33,25 @@ function init() {
     mediaViewer = new MediaViewer();
     mediaViewer.init();
 
+    startMasonry();
+    window.removeEventListener('pagehide', stopMasonry);
+    window.removeEventListener('pageshow', startMasonry);
+    window.addEventListener('pagehide', stopMasonry);
+    window.addEventListener('pageshow', startMasonry);
+
     initSettings();
     bindEventHandlers();
+}
+
+function startMasonry() {
+    stopMasonry();
+    const root = document.getElementById('main-gallery');
+    if (root) masonry = new GalleryMasonry(root);
+}
+
+function stopMasonry() {
+    masonry?.destroy();
+    masonry = null;
 }
 
 function bindEventHandlers() {
@@ -387,7 +406,7 @@ export function loadGalleryPage(page, append, callback) {
                                     const key = $(imageGroup).data('key');
                                     const originalGalleryContainer = $(`.gallery-container-wrapper .gallery-container-${type}:first`);
                                     const originalImageGroup = originalGalleryContainer.find(`.image-group-${key}`);
-                                    if (originalImageGroup === undefined) {
+                                    if (originalImageGroup.length === 0) {
                                         $(imageGroup).appendTo(originalGalleryContainer);
                                     } else {
                                         const originalImageGroupContainer = originalImageGroup.find(`.image-container`);
