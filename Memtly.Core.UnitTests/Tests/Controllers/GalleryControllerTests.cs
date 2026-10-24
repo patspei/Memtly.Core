@@ -124,6 +124,9 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             _settings.GetOrDefault(MemtlyConfiguration.Slideshow.IncludeVideoSlides, Arg.Any<bool>(), Arg.Any<int>()).Returns(true);
 
             _file.GetChecksum(Arg.Any<string>()).Returns(Guid.NewGuid().ToString());
+            // A real file has a valid timestamp. DateTime.MinValue from an unstubbed
+            // mock underflows DateTimeOffset in time zones east of UTC.
+            _file.GetCreationDatetime(Arg.Any<string>()).Returns(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
             _notification.Send(Arg.Any<string>(), Arg.Any<string>()).Returns(Task.FromResult(true));
 

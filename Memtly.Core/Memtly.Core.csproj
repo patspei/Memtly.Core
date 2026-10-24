@@ -13,6 +13,10 @@
     <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Content Remove="wwwroot\dist\**" />
+  </ItemGroup>
+
   <Target Name="CleanDist" BeforeTargets="NpmInstall">
     <RemoveDir Directories="$(ProjectDir)wwwroot/dist" />
   </Target>
@@ -21,12 +25,22 @@
     <Exec Command="npm ci" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
-  <Target Name="BuildAssetsDebug" BeforeTargets="ResolveStaticWebAssetsInputs" Condition="'$(Configuration)' == 'Debug'">
+  <Target Name="BuildAssetsDebug" Condition="'$(Configuration)' == 'Debug'">
     <Exec Command="npm run development" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
-  <Target Name="BuildAssetsProd" BeforeTargets="ResolveStaticWebAssetsInputs" Condition="'$(Configuration)' == 'Release'">
+  <Target Name="BuildAssetsProd" Condition="'$(Configuration)' == 'Release'">
     <Exec Command="npm run production" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
+  <!-- Webpack replaces dist on every build. Register its current outputs only after
+       generation so switching Debug/Release cannot retain deleted asset names. -->
+  <Target Name="RegisterBuiltAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="BuildAssetsDebug;BuildAssetsProd">
+    <ItemGroup>
+      <Content Remove="wwwroot\dist\**" />
+      <Content Include="wwwroot\dist\**" />
+      <EmbeddedResource Include="wwwroot\dist\manifest.json" />
+    </ItemGroup>
   </Target>
 
   <ItemGroup>
@@ -185,7 +199,6 @@
     <None Include="wwwroot\images\next.png" />
     <None Include="wwwroot\images\play-button.svg" />
     <None Include="wwwroot\images\prev.png" />
-    <EmbeddedResource Include="wwwroot\dist\manifest.json" Condition="Exists('wwwroot\dist\manifest.json')" />
   </ItemGroup>
 
 
