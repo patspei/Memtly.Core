@@ -1,4 +1,4 @@
-﻿import { displayMessage } from '@modules/message-box';
+import { displayMessage } from '@modules/message-box';
 import { displayPopup, hidePopup } from '@modules/popups';
 import { displayLoader, hideLoader } from '@modules/loader';
 import { displayIdentityCheck } from '@modules/identity-check';
@@ -18,6 +18,10 @@ class UploadBox {
 
     isIdentityRequired() {
         return $('form.file-uploader-form').attr('data-identity-required') === 'true';
+    }
+
+    isPrivateDrop() {
+        return $('form.file-uploader-form').attr('data-gallery-type') === 'drop';
     }
 
     isCollection() {
@@ -243,6 +247,12 @@ class UploadBox {
     async handleFiles(dataRefs) {
         let files = [...dataRefs.files];
 
+        const unsupported = files.filter(file => /\.(heic|heif)$/i.test(file.name));
+        if (unsupported.length) {
+            displayMessage('Fotos hochladen', 'HEIC/HEIF wird nicht unterstützt. Bitte exportiert diese Fotos als JPEG. Auf dem iPhone: Einstellungen → Kamera → Formate → Maximale Kompatibilität. Wählt danach eure Fotos erneut aus.');
+            dataRefs.input.value = '';
+            return;
+        }
         // Remove unaccepted file types
         files = files.filter(item => {
             const isAllowed = this.isImageFile(item) || this.isVideoFile(item);
@@ -252,7 +262,10 @@ class UploadBox {
             return isAllowed;
         });
 
-        if (!files.length) return;
+        if (!files.length) {
+            displayMessage('Fotos hochladen', 'Bitte wählt unterstützte Fotos (JPEG, PNG) oder Videos aus.');
+            return;
+        }
 
         dataRefs.files = files;
         await this.imageUpload(dataRefs);
@@ -350,8 +363,8 @@ class UploadBox {
                         } else {
                             processFileChunk(requestId, fileIndex, uploadId, chunkId + 1);
                         }
-                    } else if (response?.errors?.length > 0) {
-                        errors.push(response.errors);
+                    } else {
+                        errors.push(response?.errors?.length ? response.errors : ['Die Datei konnte nicht hochgeladen werden. Bitte versucht es erneut.']);
                         processFileUpload(requestId, fileIndex + 1);
                     }
                 },
@@ -368,7 +381,7 @@ class UploadBox {
 
                     xhr.upload.addEventListener("progress", (evt) => {
                         if (evt.lengthComputable) {
-                            const percentComplete = Math.floor((evt.loaded / evt.total) * 100);
+                            const percentComplete = Math.floor((start + (end - start) * evt.loaded / evt.total) / dataRefs.files[fileIndex].size * 100);
                             const progressElement = $('span#file-upload-progress');
                             if (progressElement.length > 0) {
                                 progressElement.text(`(${percentComplete}%)`);
@@ -432,9 +445,9 @@ class UploadBox {
                             refreshGalleryPage();
 
                             if (response.requiresReview) {
-                                displayMessage(localization.translate('Upload'), localization.translate('Upload_Success_Pending_Review'), errors);
+                                displayMessage('Vielen Dank!', this.isPrivateDrop() ? 'Eure Fotos sind sicher angekommen und bleiben nur für Julia & Patrick sichtbar.' : 'Eure Fotos sind angekommen. Nach Freigabe durch Julia & Patrick erscheinen sie in der Galerie.', errors);
                             } else {
-                                displayMessage(localization.translate('Upload'), localization.translate('Upload_Success'), errors);
+                                displayMessage('Vielen Dank!', this.isPrivateDrop() ? 'Eure Fotos sind sicher angekommen und bleiben nur für Julia & Patrick sichtbar.' : localization.translate('Upload_Success'), errors);
                             }
                         },
                         error: (jqXHR, textStatus, errorThrown) => {

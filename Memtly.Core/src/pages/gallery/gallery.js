@@ -1,8 +1,7 @@
-﻿import { displayMessage } from '@modules/message-box';
+import { downloadArchive } from '@modules/download-confirm';
+import { displayMessage } from '@modules/message-box';
 import { displayPopup } from '@modules/popups';
 import { displayLoader, hideLoader } from '@modules/loader';
-import { getTimestamp } from '@utilities/datetime';
-import { downloadBlob } from '@utilities/blobs';
 import { default as galleryUpload } from '@modules/upload-box';
 import MediaViewer from '@modules/media-viewer';
 import Slideshow from '@modules/slideshow';
@@ -130,143 +129,20 @@ function bindQRCodeSave() {
 function bindDownloadGroup() {
     $(document).off('click', '.btnDownloadGroup').on('click', '.btnDownloadGroup', (e) => {
         preventDefaults(e);
-
-        if ($(e.currentTarget).attr('disabled') === 'disabled') {
-            return;
-        }
-
-        displayLoader(localization.translate('Generating_Download'));
-
-        const id = $(e.currentTarget).data('gallery-id');
-        const name = $(e.currentTarget).data('gallery-name');
-        const secretKey = $(e.currentTarget).data('gallery-key');
-        const group = $(e.currentTarget).data('group-name');
-
-        const items = $('div#main-gallery .btn-multi-select.fa-square-check');
-        let ids = items.map(function () { return $(this).data('id'); }).get();
-
-        let nativeXhr;
-
-        $.ajax({
-            url: '/Gallery/DownloadGallery',
-            method: 'POST',
-            data: { Id: id, SecretKey: secretKey, Group: group, FileFilter: ids },
-            xhr: function () {
-                nativeXhr = new XMLHttpRequest();
-                return nativeXhr;
-            },
-            xhrFields: {
-                responseType: 'blob'
-            },
-        })
-            .done((data) => {
-                hideLoader();
-                downloadBlob(`${name}_${getTimestamp()}.zip`, 'application/zip', data, nativeXhr);
-            })
-            .fail(async function (jqXHR) {
-                hideLoader();
-
-                try {
-                    if (nativeXhr.response instanceof Blob) {
-                        const text = await nativeXhr.response.text();
-                        const json = JSON.parse(text);
-
-                        if (json.message !== undefined) {
-                            displayMessage(
-                                localization.translate('Download'),
-                                localization.translate('Download_Failed'),
-                                [json.message]
-                            );
-                        } else {
-                            displayMessage(
-                                localization.translate('Download'),
-                                localization.translate('Download_Failed')
-                            );
-                        }
-                    } else {
-                        displayMessage(
-                            localization.translate('Download'),
-                            localization.translate('Download_Failed')
-                        );
-                    }
-                } catch {
-                    displayMessage(
-                        localization.translate('Download'),
-                        localization.translate('Download_Failed')
-                    );
-                }
-            });
+        downloadArchive({ Id: $(e.currentTarget).data('gallery-id'), Group: $(e.currentTarget).data('group-name') });
     });
 }
 
 function bindDownloadGallery() {
-    $(document).off('click', 'button.btnDownloadGallery').on('click', 'button.btnDownloadGallery', (e) => {
+    $(document).off('click', 'button.btnDownloadGallery, button.btnDownloadSelected').on('click', 'button.btnDownloadGallery, button.btnDownloadSelected', (e) => {
         preventDefaults(e);
-
-        if ($(e.currentTarget).attr('disabled') === 'disabled') {
+        const selected = $(e.currentTarget).hasClass('btnDownloadSelected');
+        const ids = $('#main-gallery .btn-multi-select.fa-square-check').map(function () { return $(this).data('id'); }).get();
+        if (selected && ids.length === 0) {
+            displayMessage('Download', 'Bitte wählt zuerst mindestens ein Foto über die Checkbox aus.');
             return;
         }
-
-        displayLoader(localization.translate('Generating_Download'));
-
-        const id = $(e.currentTarget).data('gallery-id');
-        const name = $(e.currentTarget).data('gallery-name');
-        const secretKey = $(e.currentTarget).data('gallery-key');
-
-        const items = $('div#main-gallery .btn-multi-select.fa-square-check');
-        let ids = items.map(function () { return $(this).data('id'); }).get();
-
-        let nativeXhr;
-
-        $.ajax({
-            url: '/Gallery/DownloadGallery',
-            method: 'POST',
-            data: { Id: id, SecretKey: secretKey, FileFilter: ids },
-            xhr: function () {
-                nativeXhr = new XMLHttpRequest();
-                return nativeXhr;
-            },
-            xhrFields: {
-                responseType: 'blob'
-            },
-        })
-            .done((data) => {
-                hideLoader();
-                downloadBlob(`${name}_${getTimestamp()}.zip`, 'application/zip', data, nativeXhr);
-            })
-            .fail(async function (jqXHR) {
-                hideLoader();
-
-                try {
-                    if (nativeXhr.response instanceof Blob) {
-                        const text = await nativeXhr.response.text();
-                        const json = JSON.parse(text);
-
-                        if (json.message !== undefined) {
-                            displayMessage(
-                                localization.translate('Download'),
-                                localization.translate('Download_Failed'),
-                                [json.message]
-                            );
-                        } else {
-                            displayMessage(
-                                localization.translate('Download'),
-                                localization.translate('Download_Failed')
-                            );
-                        }
-                    } else {
-                        displayMessage(
-                            localization.translate('Download'),
-                            localization.translate('Download_Failed')
-                        );
-                    }
-                } catch {
-                    displayMessage(
-                        localization.translate('Download'),
-                        localization.translate('Download_Failed')
-                    );
-                }
-            });
+        downloadArchive({ Id: $(e.currentTarget).data('gallery-id'), FileFilter: selected ? ids : [] });
     });
 }
 

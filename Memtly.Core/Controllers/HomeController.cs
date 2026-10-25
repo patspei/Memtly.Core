@@ -36,6 +36,8 @@ namespace Memtly.Core.Controllers
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public async Task<IActionResult> Index()
         {
+            var wedding = Models.WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
+            if (wedding.Enabled) return View("Wedding", wedding);
             var model = new Views.Home.IndexModel();
 
             try

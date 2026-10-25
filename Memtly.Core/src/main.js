@@ -1,4 +1,6 @@
-﻿import '@styles/main.css';
+import '@styles/main.css';
+import '@styles/wedding.css';
+import initWedding from '@modules/wedding';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap';
 import '@fortawesome/fontawesome-free/css/all.min.css';
@@ -37,6 +39,7 @@ async function init() {
     window.localization = localization;
 
     initPage();
+    initWedding();
     initGdpr();
     initThemes();
     initSponsors();
@@ -115,6 +118,7 @@ function bindLoginPrompt() {
 }
 
 function resizeLayout() {
+    if (document.body.classList.contains('wedding-public')) return;
     if ($('div#main-wrapper').length > 0) {
         let windowWidth = $(window).width();
         let windowHeight = $(window).height();

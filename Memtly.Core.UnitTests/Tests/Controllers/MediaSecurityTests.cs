@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
@@ -92,6 +94,7 @@ public class MediaSecurityTests
             .ConfigureLogging(logging => logging.ClearProviders())
             .ConfigureServices(services =>
             {
+                services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(root, "keys")));
                 services.AddControllersWithViews().AddApplicationPart(typeof(GalleryController).Assembly);
                 services.AddAuthorization();
                 services.AddDistributedMemoryCache(); services.AddSession();
@@ -112,6 +115,7 @@ public class MediaSecurityTests
             })
             .Configure(app =>
             {
+                app.UseDeveloperExceptionPage();
                 app.UseMiddleware<PrivateMediaMiddleware>();
                 app.UseStaticFiles();
                 // Test authentication exists only in this isolated test host.
@@ -183,6 +187,58 @@ public class MediaSecurityTests
         client.PostAsync("/Gallery/DownloadGallery", new FormUrlEncodedContent(
             new[] { new KeyValuePair<string, string>("id", id.ToString()) }
                 .Concat(extra.Select(p => new KeyValuePair<string, string>(p.Key, p.Value)))));
+
+    [TestCase(1, HttpStatusCode.OK)]
+    [TestCase(2, HttpStatusCode.NotFound)]
+    [TestCase(3, HttpStatusCode.NotFound)]
+    [TestCase(4, HttpStatusCode.NotFound)]
+    [TestCase(5, HttpStatusCode.NotFound)]
+    public async Task SingleDownloadMetadataUsesDownloadAuthorization(int id, HttpStatusCode status)
+    {
+        using var client = Client();
+        var response = await client.GetAsync($"/Media/DownloadInfo/{id}");
+        Assert.That(response.StatusCode, Is.EqualTo(status));
+        Assert.That(response.Headers.CacheControl?.NoStore, Is.True);
+        if (status == HttpStatusCode.OK)
+        {
+            var info = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.That(info.GetProperty("count").GetInt32(), Is.EqualTo(1));
+            Assert.That(info.GetProperty("bytes").GetInt64(), Is.EqualTo("APPROVED-PUBLIC".Length));
+        }
+    }
+
+    [Test]
+    public async Task ConfiguredPrivateGalleryCannotBecomePublicThroughWrongGalleryType()
+    {
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Wedding:Enabled"] = "true", ["Wedding:PrivateGallery"] = "Public" }).Build();
+        var access = new MediaAccessHelper(database, new IdentityHelper(), settings, configuration);
+        var context = new DefaultHttpContext();
+        Assert.That(await access.CanRead(context, items.Single(item => item.Id == 1)), Is.False);
+        Assert.That(await access.CanDownload(context, items.Single(item => item.Id == 1)), Is.False);
+    }
+
+    [Test]
+    public async Task ArchiveMetadataAndFilteredZipHaveTheSameAuthorizedFiles()
+    {
+        using var client = Client();
+        var response = await client.PostAsync("/Gallery/DownloadInfo", new FormUrlEncodedContent(new Dictionary<string,string> { ["id"] = "1", ["fileFilter[0]"] = "approved.jpg", ["fileFilter[1]"] = "pending.jpg" }));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var info = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var zip = await Zip(await Download(client, 1, ("fileFilter[0]", "approved.jpg"), ("fileFilter[1]", "pending.jpg")));
+        Assert.That(info.GetProperty("count").GetInt32(), Is.EqualTo(zip.Count));
+        Assert.That(info.GetProperty("bytes").GetInt64(), Is.EqualTo(zip.Values.Sum(value => value.Length)));
+    }
+
+    [TestCase(2, HttpStatusCode.Forbidden)]
+    [TestCase(3, HttpStatusCode.Forbidden)]
+    public async Task ArchiveMetadataDoesNotRevealProtectedOrDropContents(int id, HttpStatusCode status)
+    {
+        using var client = Client();
+        var response = await client.PostAsync("/Gallery/DownloadInfo", new FormUrlEncodedContent(new Dictionary<string,string> { ["id"] = id.ToString() }));
+        Assert.That(response.StatusCode, Is.EqualTo(status));
+        Assert.That(await response.Content.ReadAsStringAsync(), Does.Not.Contain("bytes"));
+    }
 
     [Test]
     public async Task AnonymousZipContainsOnlyApprovedEvenWhenShowPendingUploadsIsTrue()

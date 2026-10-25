@@ -19,7 +19,7 @@ public interface IMediaAccessHelper
 }
 
 /// <summary>One request-scoped policy for gallery cards, previews, originals and archives.</summary>
-public sealed class MediaAccessHelper(IDatabaseHelper database, IIdentityHelper identity, ISettingsHelper settings) : IMediaAccessHelper
+public sealed class MediaAccessHelper(IDatabaseHelper database, IIdentityHelper identity, ISettingsHelper settings, IConfiguration? configuration = null) : IMediaAccessHelper
 {
     private readonly Dictionary<int, GalleryModel?> galleries = new();
     private readonly Dictionary<int, bool> access = new();
@@ -76,6 +76,8 @@ public sealed class MediaAccessHelper(IDatabaseHelper database, IIdentityHelper 
     {
         var gallery = await Gallery(item.GalleryId);
         if (gallery == null || gallery.Type is not (GalleryType.Basic or GalleryType.Drop)) return false;
+        var wedding = Models.WeddingOptions.Read(configuration);
+        if (wedding.IsPrivate(gallery) && !CanManage(context, gallery)) return false;
         if (!access.TryGetValue(gallery.Id, out var allowed)) access[gallery.Id] = allowed = await CanAccessGallery(context, gallery);
         if (!allowed) return false;
         if (CanManage(context, gallery)) return item.State is GalleryItemState.Approved or GalleryItemState.Pending or GalleryItemState.Rejected;

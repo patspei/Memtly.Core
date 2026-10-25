@@ -1,9 +1,11 @@
-﻿@model Memtly.Core.Models.PhotoGallery
+@model Memtly.Core.Models.PhotoGallery
 @using Memtly.Core.Constants
 @inject Memtly.Core.Helpers.IUrlHelper _url
+@inject Microsoft.Extensions.Configuration.IConfiguration WeddingConfiguration
 
 @{
-    var fullWidth = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.FullWidth, false, Model?.Gallery?.Id);
+    var wedding = Memtly.Core.Models.WeddingOptions.Read(WeddingConfiguration);
+    var fullWidth = wedding.Enabled || await _settings.GetOrDefault(MemtlyConfiguration.Gallery.FullWidth, false, Model?.Gallery?.Id);
     var qrAppend = new List<KeyValuePair<string, string>>();
 
     var qrDefaultView = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.QRCode.DefaultView, string.Empty, Model?.Gallery?.Id);
@@ -47,12 +49,12 @@
     ViewBag.QRCodeLink = _url.GenerateFullUrl(Context.Request, Context.Request.Path, qrAppend, qrExclude);
 }
 
-@if (Model?.Gallery != null && Model?.UploadActivated != null && Model.UploadActivated && Model.ViewMode != ViewMode.Presentation && Model.ViewMode != ViewMode.Slideshow)
+@if (Model?.Gallery != null && Model?.UploadActivated != null && Model.UploadActivated && !wedding.IsProfessional(Model.Gallery) && Model.ViewMode != ViewMode.Presentation && Model.ViewMode != ViewMode.Slideshow)
 {
     var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", Model?.Gallery?.Id))?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)?.Select(x => $".{x.Trim('.')}")?.OrderBy(x => x)?.ToList() ?? new List<string>();
     var identityRequired = await _settings.GetOrDefault(MemtlyConfiguration.IdentityCheck.RequireIdentityForUpload, false);
 
-    <header class="file-uploader bg-dark py-1 py-lg-4">
+    <header id="share-photos" class="file-uploader bg-dark py-1 py-lg-4">
         <div class="container px-0 px-lg-2">
             <form class="file-uploader-form" data-gallery-type="@Model!.Gallery.Type.ToString().ToLower()" data-identity-required="@((identityRequired && (string.IsNullOrWhiteSpace(Context?.Session?.GetString(SessionKey.Viewer.Identity)) || (Context?.Session?.GetString(SessionKey.Viewer.Identity)?.Equals("Anonymous", StringComparison.OrdinalIgnoreCase) ?? true))).ToString().ToLower())">
                 @Html.AntiForgeryToken()
@@ -62,11 +64,16 @@
                         <use href="#icon-image-upload"></use>
                     </svg>
 
-                    <h2 class="strong my-2">@_localizer["Upload_Media"].Value</h2>
+                    <h2 class="strong my-2">@(wedding.Enabled ? "Eigene Fotos teilen" : _localizer["Upload_Media"].Value)</h2>
+                    @if (wedding.Enabled)
+                    {
+                        <button type="button" class="wedding-button my-3">Fotos auswählen</button>
+                    }
                     <p class="small my-2">@(ViewBag.IsMobile ?? false ? _localizer["Click_To_Upload"].Value : _localizer["Drag_And_Drop"].Value)</p>
+                    <p class="small my-2">@(wedding.IsPrivate(Model.Gallery) ? "Diese Fotos sehen nur Julia & Patrick." : wedding.NeedsReview(Model.Gallery) ? "Eure Fotos werden nach Freigabe durch Julia & Patrick veröffentlicht." : "")</p>
                     <p class="small my-2">(@string.Join(", ", allowedFileTypes).ToLower())</p>
 
-                    <input class="position-absolute invisible upload-input" data-post-collection-id="@(Model!.Gallery.Type == GalleryType.Collection ? Model.Gallery.Id : 0)" data-post-gallery-id="@(Model!.Gallery.Type != GalleryType.Collection ? Model.Gallery.Id : 0)" data-post-key="@Model?.SecretKey" data-post-allow-camera="@(((ViewBag.IsMobile ?? false) && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.CameraUploads, false)).ToString().ToLower())" type="file" multiple accept="image/*,video/*" />
+                    <input class="position-absolute invisible upload-input" data-post-collection-id="@(Model!.Gallery.Type == GalleryType.Collection ? Model.Gallery.Id : 0)" data-post-gallery-id="@(Model!.Gallery.Type != GalleryType.Collection ? Model.Gallery.Id : 0)" data-post-key="@(Model.Gallery.Type == GalleryType.Collection ? Model.SecretKey : string.Empty)" data-post-allow-camera="@(((ViewBag.IsMobile ?? false) && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.CameraUploads, false)).ToString().ToLower())" type="file" multiple accept="image/*,video/*" />
                 </fieldset>
             </form>
         </div>
@@ -79,6 +86,16 @@
             </symbol>
         </defs>
     </svg>
+}
+
+@if (wedding.Enabled && Model?.Gallery != null && Model.Gallery.Type != GalleryType.Drop && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, Model.Gallery.Id))
+{
+    <div class="wedding-download-bar" aria-label="Fotos herunterladen">
+        <button type="button" class="btnDownloadSelected wedding-button" data-gallery-id="@Model.Gallery.Id">Auswahl herunterladen</button>
+        <button type="button" class="btnDownloadGallery wedding-button wedding-button-outline" data-gallery-id="@Model.Gallery.Id">Alle Fotos herunterladen</button>
+        <button type="button" class="btn-multi-select-all wedding-button wedding-button-outline">Alle auf dieser Seite auswählen</button>
+        <button type="button" class="btn-multi-deselect-all wedding-button wedding-button-outline d-none">Auswahl aufheben</button>
+    </div>
 }
 
 <section class="py-1 py-lg-4">

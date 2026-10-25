@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.Security.Claims;
 using Memtly.Core.Constants;
 using Memtly.Core.Controllers;
@@ -648,6 +650,50 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             Assert.That(JsonResponseHelper.GetPropertyValue(actual.Value, "Success", false), Is.True);
             Assert.That(JsonResponseHelper.GetPropertyValue(actual.Value, "Complete", false), Is.True);
             Assert.That(JsonResponseHelper.GetPropertyValue(actual.Value, "Errors", new List<string>()).Count, Is.EqualTo(0));
+        }
+
+        [TestCase("Unsere Hochzeit", GalleryType.Basic, false, false)]
+        [TestCase("Eure Hochzeitsfotos", GalleryType.Basic, false, true)]
+        [TestCase("Eure Hochzeitsfotos", GalleryType.Basic, true, false)]
+        [TestCase("Nur für Julia & Patrick", GalleryType.Basic, false, false)]
+        [TestCase("Nur für Julia & Patrick", GalleryType.Drop, false, true)]
+        public async Task WeddingUploadsEnforceDestinationAndReview(string name, GalleryType type, bool disabled, bool allowed)
+        {
+            _database.GetGallery(1).Returns(new GalleryModel { Id = 1, Identifier = "wedding", Name = name, Type = type, Owner = 2 });
+            _database.GetUser(Arg.Any<int>()).Returns(new UserModel());
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, Arg.Any<bool>(), Arg.Any<int?>()).Returns(false);
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, Arg.Any<bool>(), Arg.Any<int?>()).Returns(!disabled);
+            _file.FileExists(Arg.Any<string>()).Returns(true);
+            _database.ClearReceivedCalls();
+            var controller = CreateController();
+            controller.ControllerContext.HttpContext = MockData.MockHttpContext();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Wedding:Enabled"] = "true" }).Build();
+            using var services = new ServiceCollection().AddSingleton<IConfiguration>(configuration).BuildServiceProvider();
+            controller.HttpContext.RequestServices = services;
+            var result = await controller.UploadFileChunk(new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(), CollectionId = 0, ChunkIndex = 0, GalleryId = 1, File = new FormFile(Stream.Null, 0, 10, "File", "photo.jpg"), FileSize = 10, FileChecksum = Guid.NewGuid().ToString(), TotalChunks = 1 });
+            if (!allowed)
+            {
+                Assert.That(result, Is.TypeOf<ObjectResult>());
+                Assert.That(((ObjectResult)result).StatusCode, Is.EqualTo(403));
+                await _database.DidNotReceive().AddGalleryItem(Arg.Any<GalleryItemModel>());
+            }
+            else
+            {
+                Assert.That(result, Is.TypeOf<JsonResult>());
+                Assert.That(JsonResponseHelper.GetPropertyValue(((JsonResult)result).Value, "Complete", false), Is.True);
+                await _database.Received().AddGalleryItem(Arg.Is<GalleryItemModel>(item => name != "Eure Hochzeitsfotos" || item.State == GalleryItemState.Pending));
+            }
+        }
+
+        [TestCase("photo.heic")]
+        [TestCase("photo.HEIF")]
+        public async Task HeicUploadReturnsActionableError(string filename)
+        {
+            var controller = CreateController();
+            controller.ControllerContext.HttpContext = MockData.MockHttpContext();
+            var result = (JsonResult)await controller.UploadFileChunk(new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(), CollectionId = 0, ChunkIndex = 0, GalleryId = 1, SecretKey = "password", FileSize = 10, FileChecksum = "test", File = new FormFile(Stream.Null, 0, 10, "File", filename), TotalChunks = 1 });
+            Assert.That(JsonResponseHelper.GetPropertyValue(result.Value, "Success", true), Is.False);
+            Assert.That(string.Join(" ", JsonResponseHelper.GetPropertyValue(result.Value, "Errors", new List<string>())), Does.Contain("JPEG"));
         }
 
         [TestCase]

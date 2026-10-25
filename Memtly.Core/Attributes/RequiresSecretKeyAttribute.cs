@@ -1,4 +1,4 @@
-﻿using System.Web;
+using System.Web;
 using Memtly.Core.Constants;
 using Memtly.Core.Helpers;
 using Memtly.Core.Helpers.Database;
@@ -79,7 +79,9 @@ namespace Memtly.Core.Attributes
                                     }
                                     else
                                     {
-                                        filterContext.Result = new RedirectResult($"/Gallery/Login?identifier={gallery.Identifier}");
+                                        var access = filterContext.HttpContext.RequestServices.GetRequiredService<IMediaAccessHelper>();
+                                        if (!access.CanAccessGallery(filterContext.HttpContext, gallery).GetAwaiter().GetResult())
+                                            filterContext.Result = new RedirectResult($"/Gallery/Login?identifier={gallery.Identifier}");
                                     }
                                 }
                             }

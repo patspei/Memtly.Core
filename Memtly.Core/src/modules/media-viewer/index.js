@@ -1,3 +1,4 @@
+import { confirmDownload, showDownloadError } from '@modules/download-confirm';
 import './media-viewer.css';
 import { displayMessage } from '@modules/message-box';
 import { displayLoader, hideLoader } from '@modules/loader';
@@ -285,7 +286,11 @@ class MediaViewer {
 
             const element = $(e.currentTarget).closest('.media-viewer');
             const source = element.data('source');
-            this.download(source.startsWith('/Media/Original/') ? `${source}?download=true` : source);
+            const id = source.match(/^\/Media\/Original\/(\d+)/)?.[1];
+            if (!id) return;
+            $.getJSON(`/Media/DownloadInfo/${id}`)
+                .done(info => confirmDownload(info, () => this.download(`${source}?download=true`)))
+                .fail(showDownloadError);
         });
     }
 
@@ -294,8 +299,8 @@ class MediaViewer {
         if (path.startsWith('/gallery')) {
             const paginationStyle = $('.pagination').data('pagination-style');
             if (paginationStyle !== undefined && paginationStyle === 'scrollloading') {
-                $('#main-wrapper').off('scroll').on('scroll', (e) => {
-                    const el = e.currentTarget;
+                $(document.body.classList.contains('wedding-public') ? window : '#main-wrapper').off('scroll.gallery').on('scroll.gallery', (e) => {
+                    const el = e.currentTarget === window ? document.scrollingElement : e.currentTarget;
                     const wrapperHeight = $(el).outerHeight();
                     const diff = el.scrollHeight - el.scrollTop - el.clientHeight;
 
@@ -559,6 +564,7 @@ class MediaViewer {
     }
 
     setMultiSelectOption(elem, selected) {
+        elem.attr('aria-pressed', selected ? 'true' : 'false');
         if (selected) {
             this.lastSelected = elem.closest('.media-viewer-card');
             elem.removeClass('fa-square').addClass('fa-square-check');

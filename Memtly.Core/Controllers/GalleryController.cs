@@ -458,11 +458,16 @@ namespace Memtly.Core.Controllers
                 var gallery = await _database.GetGallery(request.GalleryId);
                 if (gallery != null)
                 {
+                    var wedding = WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
+                    if (wedding.IsWedding(gallery) && (!wedding.ValidType(gallery) || request.CollectionId > 0 ||
+                        (wedding.IsProfessional(gallery) && !_mediaAccess.CanManage(HttpContext, gallery)) ||
+                        !await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, true, gallery.Id)))
+                        return StatusCode(403, new { success = false, errors = new[] { "Uploads sind in dieser Galerie nicht erlaubt." } });
                     if (galleryType == GalleryType.Collection && (!string.IsNullOrWhiteSpace(collection?.SecretKey) && !string.Equals(collection?.SecretKey, request.SecretKey)))
                     {
                         return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, _localizer["Invalid_Secret_Key_Warning"].Value));
                     }
-                    else if (galleryType != GalleryType.Collection && (!string.IsNullOrWhiteSpace(gallery?.SecretKey) && !string.Equals(gallery?.SecretKey, request.SecretKey)))
+                    else if (galleryType != GalleryType.Collection && !await _mediaAccess.CanAccessGallery(HttpContext, gallery, string.IsNullOrEmpty(request.SecretKey) ? null : request.SecretKey))
                     {
                         return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, _localizer["Invalid_Secret_Key_Warning"].Value));
                     }
@@ -472,6 +477,8 @@ namespace Memtly.Core.Controllers
                         if (request.File != null)
                         {
                             var extension = Path.GetExtension(request.File.FileName);
+                            if (extension.Equals(".heic", StringComparison.OrdinalIgnoreCase) || extension.Equals(".heif", StringComparison.OrdinalIgnoreCase))
+                                return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, "HEIC/HEIF wird nicht unterstützt. Bitte exportiere deine Fotos als JPEG oder wähle auf dem iPhone unter Kamera → Formate die Option Maximale Kompatibilität."));
                             var maxGallerySize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxSizeMB, 1024L, collection?.Id ?? gallery.Id) * 1000000;
                             var maxFilesSize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxFileSizeMB, 50L, collection?.Id ?? gallery.Id) * 1000000;
                             var isDemoMode = await _settings.GetOrDefault(MemtlyConfiguration.IsDemoMode, false);
@@ -512,7 +519,7 @@ namespace Memtly.Core.Controllers
                                 }
 
                                 var galleryOwner = await _database.GetUser(collection?.Owner ?? gallery.Owner);
-                                var requiresReview = galleryOwner!.CanUseFeature(FeaturePermissions.RequireGalleryItemReview) && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, true, collection?.Id ?? gallery.Id);
+                                var requiresReview = wedding.NeedsReview(gallery) || (galleryOwner!.CanUseFeature(FeaturePermissions.RequireGalleryItemReview) && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, true, collection?.Id ?? gallery.Id));
                                 var galleryPath = requiresReview ? Path.Combine(UploadsDirectory, gallery.Identifier, "Pending") : Path.Combine(UploadsDirectory, gallery.Identifier);
 
                                 _fileHelper.CreateDirectoryIfNotExists(galleryPath);
@@ -669,17 +676,22 @@ namespace Memtly.Core.Controllers
                 var gallery = await _database.GetGallery(request.GalleryId);
                 if (gallery != null)
                 {
+                    var wedding = WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
+                    if (wedding.IsWedding(gallery) && (!wedding.ValidType(gallery) || request.CollectionId > 0 ||
+                        (wedding.IsProfessional(gallery) && !_mediaAccess.CanManage(HttpContext, gallery)) ||
+                        !await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, true, gallery.Id)))
+                        return StatusCode(403, new { success = false, errors = new[] { "Uploads sind in dieser Galerie nicht erlaubt." } });
                     if (galleryType == GalleryType.Collection && (!string.IsNullOrWhiteSpace(collection?.SecretKey) && !string.Equals(collection?.SecretKey, request.SecretKey)))
                     {
                         return Json(new MediaBatchUploadFailureResponse(request.RequestId, _localizer["Invalid_Secret_Key_Warning"].Value));
                     }
-                    else if (galleryType != GalleryType.Collection && (!string.IsNullOrWhiteSpace(gallery?.SecretKey) && !string.Equals(gallery?.SecretKey, request.SecretKey)))
+                    else if (galleryType != GalleryType.Collection && !await _mediaAccess.CanAccessGallery(HttpContext, gallery, string.IsNullOrEmpty(request.SecretKey) ? null : request.SecretKey))
                     {
                         return Json(new MediaBatchUploadFailureResponse(request.RequestId, _localizer["Invalid_Secret_Key_Warning"].Value));
                     }
 
                     var galleryOwner = await _database.GetUser(collection?.Owner ?? gallery.Owner);
-                    var requiresReview = galleryOwner!.CanUseFeature(FeaturePermissions.RequireGalleryItemReview) && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, true, collection?.Id ?? gallery.Id);
+                    var requiresReview = wedding.NeedsReview(gallery) || (galleryOwner!.CanUseFeature(FeaturePermissions.RequireGalleryItemReview) && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, true, collection?.Id ?? gallery.Id));
 
                     string uploadedBy = HttpContext.Session.GetString(SessionKey.Viewer.Identity)?.Trim() ?? "Anonymous";
 
@@ -718,6 +730,17 @@ namespace Memtly.Core.Controllers
             }
 
             return Json(new MediaBatchUploadFailureResponse(request.RequestId, _localizer["Image_Upload_Failed"].Value));
+        }
+
+        [HttpPost]
+        [RequestTimeout("timeout_1h")]
+        public async Task<IActionResult> DownloadInfo(int id, string? secretKey, string? group, List<string>? fileFilter)
+        {
+            Response.Headers.CacheControl = "private, no-store, max-age=0";
+            var plan = await _downloads.Build(HttpContext, id, secretKey, group, fileFilter);
+            if (plan.StatusCode != 200) return StatusCode(plan.StatusCode, new { success = false });
+            var paths = plan.Files.SelectMany(entry => entry.Files ?? []).ToList();
+            return Json(new { count = paths.Count, bytes = paths.Sum(path => new FileInfo(path).Length) });
         }
 
         [HttpPost]

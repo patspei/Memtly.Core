@@ -11,6 +11,16 @@ namespace Memtly.Core.Controllers;
 public sealed class MediaController(IDatabaseHelper database, IMediaAccessHelper access, IMediaFileStore files,
     IIdentityHelper identity, IMediaThumbnailHelper thumbnails) : Controller
 {
+    [HttpGet("/Media/DownloadInfo/{id:int}")]
+    public async Task<IActionResult> DownloadInfo(int id)
+    {
+        NoCache();
+        var item = await database.GetGalleryItem(id);
+        if (item == null || !await access.CanDownload(HttpContext, item)) return NotFound();
+        var gallery = await database.GetGallery(item.GalleryId);
+        var path = gallery == null ? null : files.GetPath(gallery, item);
+        return path == null ? NotFound() : Json(new { count = 1, bytes = new FileInfo(path).Length });
+    }
     [HttpGet("/Media/Original/{id:int}")]
     [HttpHead("/Media/Original/{id:int}")]
     public async Task<IActionResult> Original([FromRoute] int id, bool download = false) => await Serve(id, false, download);

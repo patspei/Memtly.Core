@@ -1,0 +1,103 @@
+.wedding-public {
+    --primary-1: 60,30,31; --primary-2: 60,30,31; --primary-3: 113,82,72;
+    --background: 250,247,242; --text: 60,30,31; --body-bg: 250,247,242;
+    --navbar-bg: 250,247,242; --navbar-text: 60,30,31; --text-contrast: 60,30,31;
+    margin: 0; background: #FAF7F2 !important; color: #3C1E1F !important;
+    font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.7;
+    overflow-x: clip; height: auto; min-height: 100vh;
+}
+.wedding-public h1,.wedding-public h2,.wedding-public h3,.wedding-public .display-6,.wedding-dialog h2 {
+    font-family: Georgia, 'Times New Roman', serif; font-weight: 400; color: inherit; letter-spacing: -.035em;
+}
+.wedding-public a { color: inherit; text-decoration: none; }
+.wedding-public button,.wedding-public a { -webkit-tap-highlight-color: transparent; }
+.wedding-public :focus-visible,.wedding-dialog :focus-visible { outline: 2px solid #977360; outline-offset: 5px; }
+.wedding-public #main-wrapper { position: relative; top: auto !important; height: auto !important; max-height: none !important; width: 100%; overflow: visible; background: #FAF7F2 !important; }
+.wedding-public .wedding-nav { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 25px 5vw; min-height: 92px; background: #FAF7F2; position: relative; width: 100%; }
+.wedding-brand { font-family: Georgia, serif; font-size: clamp(22px, 2.4vw, 31px); letter-spacing: -.04em; white-space: nowrap; }
+.wedding-nav .wedding-nav-links { display: flex; align-items: center; gap: 35px; font-size: 12px; letter-spacing: .03em; }
+.wedding-nav-share { color: #3C1E1F; background: transparent; border: 0; border-bottom: 1px solid #b6a294; padding: 10px 0; }
+.wedding-public .wedding-hero { position: relative; min-height: 560px; height: min(78vh, 960px); margin: 0 22px; isolation: isolate; display: grid; place-items: center; color: #fff; text-align: center; }
+.wedding-hero > img { position: absolute; inset: 0; height: 100%; width: 100%; object-fit: cover; z-index: -2; }
+.wedding-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, #241b1930, #241b1975); }
+.wedding-hero-copy { padding: 35px 22px; }
+.wedding-eyebrow { text-transform: uppercase; font: 10px/1.6 Arial, sans-serif; letter-spacing: .24em; margin: 0 0 22px; }
+.wedding-hero h1 { font-size: clamp(48px, 7.5vw, 112px); line-height: 1.04; margin: 20px 0 25px; }
+.wedding-hero-copy > p:not(.wedding-eyebrow) { font-size: 15px; letter-spacing: .05em; margin-bottom: 35px; }
+.wedding-hero-note { position: absolute; bottom: 25px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+.wedding-button { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 20px; min-height: 50px; padding: 14px 26px; border: 1px solid #3C1E1F; border-radius: 0; background: #3C1E1F; color: #FAF7F2 !important; text-decoration: none; font: 12px/1.6 Arial,sans-serif; cursor: pointer; transition: background .2s, transform .2s; }
+.wedding-button:hover { background: #604243; transform: translateY(-1px); }
+.wedding-button.wedding-button-light { background: #FAF7F2; color: #3C1E1F !important; border-color: #FAF7F2; }
+.wedding-button.wedding-button-outline { background: transparent; color: #3C1E1F !important; border-color: #c8b8ac; }
+.wedding-intro { text-align: center; max-width: 700px; margin: auto; padding: 110px 25px 70px; scroll-margin-top: 25px; }
+.wedding-intro h2,.wedding-share h2 { font-size: clamp(35px, 4vw, 56px); line-height: 1.15; margin-bottom: 26px; }
+.wedding-intro > p:last-child,.wedding-share > p:not(.wedding-eyebrow) { color: #7b675f; max-width: 530px; margin: 0 auto; }
+.wedding-cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 30px; max-width: 1440px; margin: auto; padding: 0 5vw 100px; }
+.wedding-card { min-width: 0; }
+.wedding-card-photo,.wedding-card-private { aspect-ratio: 4/5; position: relative; overflow: hidden; background: #d8c9bc; }
+.wedding-card-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s; }
+.wedding-card-photo-guests img { object-position: 25% center; }
+.wedding-card:hover img { transform: scale(1.035); }
+.wedding-card-photo::after { content: ''; position: absolute; inset: 60% 0 0; background: linear-gradient(transparent,#21181865); }
+.wedding-card-photo > span,.wedding-card-private > span:last-child { position: absolute; bottom: 22px; left: 23px; color: #fff; font-size: 10px; letter-spacing: .12em; z-index: 1; }
+.wedding-card-private { background: #795e53; display: grid; place-items: center; color: #f2e8dc; }
+.wedding-monogram { font: 60px Georgia, serif; letter-spacing: -.08em; border: 1px solid #dfcbb75c; border-radius: 50%; width: 180px; height: 220px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.wedding-monogram em { font-size: 35px; }
+.wedding-card-copy { padding: 25px 0 0; }
+.wedding-card h3 { font-size: clamp(27px,2.4vw,36px); line-height: 1.25; margin-bottom: 12px; }
+.wedding-card p { font-size: 13px; color: #7b675f; max-width: 320px; margin-bottom: 22px; }
+.wedding-card-copy > span { display: inline-block; font-size: 11px; letter-spacing: .04em; border-bottom: 1px solid #c8b8ac; padding-bottom: 7px; }
+.wedding-share { text-align: center; background: #eee6dc; padding: 85px 25px 90px; }
+.wedding-share h2 { max-width: 650px; margin-left: auto; margin-right: auto; }
+.wedding-share .wedding-button { margin-top: 30px; }
+.wedding-share small { display: block; margin-top: 17px; color: #7b675f; font-size: 10px; }
+.wedding-public footer.wedding-footer { position: relative; height: auto; background: #FAF7F2; padding: 50px 25px 35px; text-align: center; width: 100%; color: #3C1E1F; }
+.wedding-public footer.wedding-footer { border-top: 1px solid #e5d9cd; }
+.wedding-public .modal .modal-content { background: #FAF7F2 !important; color: #3C1E1F; border-radius: 0; }
+.wedding-public .loading-overlay-content { font-size: 14px; line-height: 1.8; letter-spacing: .04em; text-transform: none; }
+.wedding-public .file-uploader + svg { max-width: 100%; }
+.wedding-footer p { color: #7b675f; font-size: 12px; margin: 10px 0 20px; }
+.wedding-footer > a { font-size: 10px; color: #7b675f; }
+.wedding-public .file-uploader { background: #eee6dc !important; color: #3C1E1F; margin-bottom: 35px; }
+.wedding-public .file-uploader .upload_drop { border: 1px dashed #b6a294; margin: 20px; cursor: pointer; }
+.wedding-public .upload_svg { fill: #795e53; width: 38px; height: 38px; }
+.wedding-public .btn { border-radius: 0; min-height: 44px; padding: 11px 18px; font-size: 12px; }
+.wedding-public .btn-primary-2 { background: #3C1E1F; color: #FAF7F2; border-color: #3C1E1F; }
+.wedding-public .gallery-container-heading,.wedding-public .review-counter { display: none; }
+.wedding-public .display-6 { margin: 30px 0 !important; font-size: clamp(36px,5vw,60px); text-transform: none !important; }
+.wedding-public #main-gallery { max-width: 1500px; margin: auto; }
+.wedding-public .image-container-masonry { --masonry-gap: 16px; }
+.wedding-public .btn-multi-select { width: 44px; height: 44px; font-size: 21px; padding: 10px; border: 1px solid #ffffff80; background: #3c1e1fb3; border-radius: 0; }
+.wedding-public .btn-multi-select[aria-pressed=true] { background: #3C1E1F; }
+.wedding-public .image-tile { overflow: hidden; position: relative; }
+.wedding-public .image-tile img { border-radius: 0 !important; }
+.wedding-download-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 20px; }
+.wedding-dialog { background: #FAF7F2; color: #3C1E1F; border: 1px solid #d9ccc0; padding: 42px; max-width: 560px; width: calc(100% - 32px); max-height: calc(100dvh - 40px); overflow-y: auto; box-shadow: 0 20px 100px #241b1929; font: 14px/1.7 Arial,sans-serif; }
+.wedding-dialog::backdrop { background: #21181890; backdrop-filter: blur(4px); }
+.wedding-dialog h2 { font-size: 36px; line-height: 1.15; margin-bottom: 20px; }
+.wedding-dialog p { color: #7b675f; }
+.wedding-dialog .download-total { color: #3C1E1F; font: 36px Georgia,serif; margin: 20px 0; }
+.wedding-dialog .download-total-large { padding: 18px; background: #eee6dc; border-left: 3px solid #795e53; }
+.wedding-dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.wedding-dialog-actions > button { flex: 1; }
+.wedding-dialog-close { position: absolute; right: 12px; top: 8px; width: 44px; height: 44px; border: 0; background: transparent; color: #3C1E1F; font-size: 27px; }
+.wedding-share-choice { display: block; padding: 20px; border: 1px solid #d9ccc0; margin: 18px 0; text-decoration: none; color: #3C1E1F; }
+.wedding-share-choice:hover { background: #eee6dc; color: #3C1E1F; }
+.wedding-share-choice span { display: block; font-size: 12px; margin-top: 8px; color: #7b675f; }
+@media(max-width:767px) {
+    .wedding-public .wedding-nav { padding: 18px 20px; min-height: 80px; gap: 12px; }
+    .wedding-nav .wedding-nav-links { gap: 0; font-size: 10px; }
+    .wedding-nav-links > a { display: none; }
+    .wedding-nav-share { max-width: 120px; line-height: 1.6; text-align: right; }
+    .wedding-public .wedding-hero { margin: 0 10px; min-height: 520px; height: 74svh; }
+    .wedding-hero-copy > p:not(.wedding-eyebrow) { font-size: 12px; }
+    .wedding-intro { padding: 70px 25px 45px; }
+    .wedding-cards { grid-template-columns: minmax(0,1fr); gap: 45px; padding: 0 25px 65px; }
+    .wedding-card-photo,.wedding-card-private { aspect-ratio: 5/4; }
+    .wedding-card p { max-width: none; }
+    .wedding-share { padding: 65px 25px; }
+    .wedding-dialog { padding: 35px 24px; }
+    .wedding-dialog h2 { font-size: 31px; }
+    .wedding-public #main-wrapper > section > .row { margin-left: 0; margin-right: 0; }
+}
+@media(prefers-reduced-motion:reduce) { .wedding-public * { transition: none !important; scroll-behavior: auto !important; } }

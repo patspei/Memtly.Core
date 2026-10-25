@@ -1,11 +1,14 @@
 @using Memtly.Core.Constants
 @inject Memtly.Core.Helpers.IConfigHelper _config
+@inject Microsoft.Extensions.Configuration.IConfiguration WeddingConfiguration
 @inject Memtly.Core.Helpers.ILanguageHelper _language
 @inject Memtly.Core.Helpers.Database.IDatabaseHelper _database
 @inject Memtly.Core.Helpers.IWebpackHelper WebpackHelper
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
 
 @{
+    var wedding = Memtly.Core.Models.WeddingOptions.Read(WeddingConfiguration);
+    var weddingPublic = wedding.Enabled && !Context.Request.Path.StartsWithSegments("/Account");
     var galleryIdentifier = (!string.IsNullOrWhiteSpace(ViewBag?.GalleryIdentifier) && !ViewBag.GalleryIdentifier.Equals(SystemGalleries.AllGallery, StringComparison.OrdinalIgnoreCase)) ? ViewBag.GalleryIdentifier.ToLower() : "default";
     var galleryId = (_database?.GetGalleryId(galleryIdentifier)?.Result) ?? 1;
 
@@ -78,19 +81,19 @@
 }
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="@(weddingPublic ? "de" : "en")">
     <head>
-        <title>@title</title>
-        <link rel="icon" type="image/png" href="@logo" />
+        <title>@(weddingPublic ? wedding.Couple + " · Unsere Hochzeit" : title)</title>
+        <link rel="icon" type="@(weddingPublic ? "image/svg+xml" : "image/png")" href="@(weddingPublic ? "/_content/Memtly.Core/images/wedding-icon.svg" : logo)" />
         <link rel="canonical" href="@siteUrl">
 
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, user-scalable=no" />
-        <meta name="description" content="Memtly is a very basic site with only one goal. It provides you and your guests a way to share memories of and leading up to an event." />
-        <meta name="author" content="Memtly" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <meta name="description" content="@(weddingPublic ? "Unsere Hochzeit – gemeinsame Erinnerungen von Julia & Patrick. Fotos entdecken, herunterladen und teilen." : "Share memories of your event.")" />
+        <meta name="author" content="@(weddingPublic ? wedding.Couple : "Memtly")" />
         <meta name="robots" content="noai, noimageai">
 
-        <meta property="og:site_name" content="@title">
+        <meta property="og:site_name" content="@(weddingPublic ? wedding.Couple : title)">
         <meta property="og:type" content="website">
         <meta property="og:url" content="@siteUrl">
 
@@ -127,7 +130,16 @@
             <link rel="stylesheet" href="@WebpackHelper.GetAssetPath($"themes/{theme}.css")" asp-append-version="true" />
         }
     </head>
-    <body data-theme="@theme" data-identity-check="@identityCheck.ToString().ToLower()">
+    <body class="@(weddingPublic ? "wedding-public" : "")" data-theme="@theme" data-identity-check="@((identityCheck && !weddingPublic).ToString().ToLower())">
+        @if (weddingPublic)
+        {
+            <nav class="wedding-nav" aria-label="Hauptnavigation">
+                <a class="wedding-brand" href="/">@wedding.Couple</a>
+                <div class="navbar-options wedding-nav-links"><a href="/#erinnerungen">Die Galerien</a><button type="button" class="wedding-nav-share" data-wedding-share>Eigene Fotos teilen <span aria-hidden="true">↗</span></button></div>
+            </nav>
+        }
+        else
+        {
         <!-- Navigation -->
         <nav class="navbar navbar-expand-lg">
             <div class="container px-3 px-lg-5 @(viewMode == ViewMode.Presentation || viewMode == ViewMode.Slideshow ? "justify-content-center" : string.Empty)">
@@ -201,6 +213,7 @@
             </div>
         </nav>
 
+        }
         <!-- Body -->
         <div id="main-wrapper">
             @if (isDemoMode)
@@ -232,6 +245,13 @@
             @RenderBody()
         </div>
 
+        @if (weddingPublic)
+        {
+            <footer class="wedding-footer"><span class="wedding-brand">@wedding.Couple</span><p>Danke, dass ihr unsere Erinnerungen mit uns teilt.</p><a href="/Account/Login">Für das Brautpaar</a></footer>
+            <partial name="~/Views/Shared/_WeddingDialogs.cshtml" />
+        }
+        else
+        {
         <!-- Footer -->
         <footer class="py-1">
             <div class="container">
@@ -247,11 +267,12 @@
             </div>
         </footer>
 
+        }
         <!-- GDPR Cookie Consent -->
         <partial name="_CookieConsentPartial" />
 
         <!-- Sponsors Button -->
-        @if (MemtlyCore.Version == MemtlyVersion.Community)
+        @if (!weddingPublic && MemtlyCore.Version == MemtlyVersion.Community)
         {
             <i class="btn-show-sponsors fas fa-bolt"></i>
         }

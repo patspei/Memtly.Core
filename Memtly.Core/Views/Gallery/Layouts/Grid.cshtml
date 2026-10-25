@@ -2,12 +2,16 @@
 
 @using System.Text.RegularExpressions
 @using Memtly.Core.Constants
+@inject Microsoft.Extensions.Configuration.IConfiguration WeddingConfiguration
 
 @{
     var userPermissions = User?.Identity?.GetUserPermissions() ?? new Permissions();
     var identityEnabled = await _settings.GetOrDefault(MemtlyConfiguration.IdentityCheck.Enabled, true);
 
+    var wedding = Memtly.Core.Models.WeddingOptions.Read(WeddingConfiguration);
+    var canGuestDownload = Model?.Gallery?.Type != GalleryType.Drop && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, Model?.Gallery?.Id);
     var thumbnailStyle = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Thumbnails.Style, ThumbnailStyle.Tile, Model?.Gallery?.Id);
+    if (wedding.Enabled) thumbnailStyle = ThumbnailStyle.Masonry;
     var columnCount = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Columns, 6, Model?.Gallery?.Id);
     if (columnCount < 1 || columnCount > 12)
     {
@@ -165,7 +169,7 @@
 
                             <div class="media-viewer-card image-tile image-tile-@(image.Orientation.ToString().ToLower())">
                                 <a href="@image.ImagePath" class="media-viewer-item" data-media-viewer-id="@image.Id" data-media-viewer-collection="@imageGroup.Key" data-media-viewer-type="gallery_item">
-                                    <img src="@image?.ThumbnailPath" class="shadow-1-strong" loading="lazy" onerror="this.onerror=null; this.src='@(image!.FallbackImagePath)'; this.closest('.media-viewer-item').querySelector('.media-viewer-play')?.remove();"/>
+                                    <img alt="Hochzeitsfoto" src="@image?.ThumbnailPath" class="shadow-1-strong" loading="lazy" onerror="this.onerror=null; this.src='@(image!.FallbackImagePath)'; this.closest('.media-viewer-item').querySelector('.media-viewer-play')?.remove();"/>
                                     @if (image?.MediaType == MediaType.Video)
                                     {
                                         <svg class="media-viewer-play" loading="lazy" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#dadada" height="800px" width="800px" version="1.1" id="Capa_1" viewBox="0 0 60 60" xml:space="preserve">
@@ -175,12 +179,12 @@
                                             </g>
                                         </svg>
                                     }
+                                    @if (canGuestDownload || (_identity.IsValid(User) && userPermissions.Gallery.HasFlag(GalleryPermissions.Download)))
+                                    {
+                                        <button type="button" class="fa fa-square btn-multi-select" data-id="@image?.Name" aria-label="Foto auswählen" aria-pressed="false"></button>
+                                    }
                                     @if (_identity.IsValid(User))
                                     {
-                                        if (userPermissions.Gallery.HasFlag(GalleryPermissions.Download))
-                                        {
-                                            <i class="fa fa-square btn-multi-select" data-id="@image?.Name"></i>
-                                        }
                                         if (userPermissions.Review.HasFlag(ReviewPermissions.Delete) || _identity.IsOwner(User, Model?.Gallery?.Owner) || _identity.IsOwner(User, image!.UploaderId))
                                         {
                                             <i class="fa fa-trash btnDeletePhoto btn-delete-item d-lg-none" data-photo-id="@image?.Id" data-photo-name="@image?.Name"></i>
