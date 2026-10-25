@@ -71,6 +71,11 @@ namespace Memtly.Core.Attributes
 
                                             filterContext.Result = new RedirectToActionResult("Index", "Error", new { Reason = ErrorCode.InvalidSecretKey }, false);
                                         }
+                                        else
+                                        {
+                                            filterContext.HttpContext.RequestServices.GetRequiredService<IMediaAccessHelper>()
+                                                .GrantGallery(filterContext.HttpContext, gallery);
+                                        }
                                     }
                                     else
                                     {
@@ -82,13 +87,14 @@ namespace Memtly.Core.Attributes
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 var logger = filterContext.HttpContext.RequestServices.GetService<ILogger<RequiresSecretKeyAttribute>>();
                 if (logger != null)
                 {
-                    logger.LogError(ex, $"Failed to validate secure key - {ex?.Message}");
+                    logger.LogError("Failed to validate gallery access credential");
                 }
+                filterContext.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             }
         }
     }

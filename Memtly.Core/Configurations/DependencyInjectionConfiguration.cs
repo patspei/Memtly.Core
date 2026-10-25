@@ -18,6 +18,10 @@ namespace Memtly.Core.Configurations
             services.AddSingleton<IUrlHelper, UrlHelper>();
             services.AddSingleton<IAuditHelper, AuditHelper>();
             services.AddSingleton<IIdentityHelper, IdentityHelper>();
+            services.AddScoped<IMediaAccessHelper, MediaAccessHelper>();
+            services.AddSingleton<IMediaFileStore, MediaFileStore>();
+            services.AddScoped<GalleryDownloadHelper>();
+            services.AddScoped<IMediaThumbnailHelper, MediaThumbnailHelper>();
             services.AddSingleton<ILanguageHelper, LanguageHelper>();
         }
     }

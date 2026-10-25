@@ -11,6 +11,11 @@ namespace Memtly.Core.Configurations
     {
         public static void AddLoggingConfiguration(this IServiceCollection services)
         {
+            // Framework request-start diagnostics contain the entire query string,
+            // including credentials in legacy gallery entry links.
+            services.AddLogging(builder => builder
+                .AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning)
+                .AddFilter("Microsoft.AspNetCore.Mvc", LogLevel.Warning));
             var bsp = services.BuildServiceProvider();
             var config = bsp.GetRequiredService<IConfiguration>();
             var configHelper = bsp.GetRequiredService<IConfigHelper>();

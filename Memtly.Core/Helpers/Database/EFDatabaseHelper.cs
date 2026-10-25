@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using Memtly.Core.Constants;
 using Memtly.Core.EntityFramework;
 using Memtly.Core.EntityFramework.Models;
@@ -374,7 +374,7 @@ namespace Memtly.Core.Helpers.Database
             {
                 foreach (var collectionId in search.CollectionIds)
                 {
-                    var galleryIds = (await GetCollections(collectionId))?.Select(ci => ci.GalleryId)?.ToList();
+                    var galleryIds = (await GetCollections(collectionId: collectionId))?.Select(ci => ci.GalleryId)?.ToList();
                     if (galleryIds != null && galleryIds.Any())
                     {
                         search.GalleryIds.AddRange(galleryIds);
@@ -391,6 +391,7 @@ namespace Memtly.Core.Helpers.Database
                     && (
                         (gi.State == GalleryItemState.Approved && (search.ItemState.Approved == ItemOwner.All || (search.ItemState.Approved == ItemOwner.UserOnly && (search.UserId == gi.UserId || search.UserId == gi.Gallery!.UserId))))
                         || (gi.State == GalleryItemState.Pending && (search.ItemState.Pending == ItemOwner.All || (search.ItemState.Pending == ItemOwner.UserOnly && (search.UserId == gi.UserId || search.UserId == gi.Gallery!.UserId))))
+                        || (gi.State == GalleryItemState.Rejected && (search.ItemState.Rejected == ItemOwner.All || (search.ItemState.Rejected == ItemOwner.UserOnly && (search.UserId == gi.UserId || search.UserId == gi.Gallery!.UserId))))
                     )
                     && (search.MediaType == MediaType.All || search.MediaType == gi.Type)
                     && (search.ImageOrientation == ImageOrientation.All || search.ImageOrientation == gi.Orientation)
@@ -422,7 +423,7 @@ namespace Memtly.Core.Helpers.Database
             {
                 foreach (var collectionId in search.CollectionIds)
                 {
-                    var galleryIds = (await GetCollections(collectionId))?.Select(ci => ci.GalleryId)?.ToList();
+                    var galleryIds = (await GetCollections(collectionId: collectionId))?.Select(ci => ci.GalleryId)?.ToList();
                     if (galleryIds != null && galleryIds.Any())
                     {
                         search.GalleryIds.AddRange(galleryIds);
@@ -440,6 +441,7 @@ namespace Memtly.Core.Helpers.Database
                     && (
                         (gi.State == GalleryItemState.Approved && (search.ItemState.Approved == ItemOwner.All || (search.ItemState.Approved == ItemOwner.UserOnly && (search.UserId == gi.UserId || search.UserId == gi.Gallery!.UserId))))
                         || (gi.State == GalleryItemState.Pending && (search.ItemState.Pending == ItemOwner.All || (search.ItemState.Pending == ItemOwner.UserOnly && (search.UserId == gi.UserId || search.UserId == gi.Gallery!.UserId))))
+                        || (gi.State == GalleryItemState.Rejected && (search.ItemState.Rejected == ItemOwner.All || (search.ItemState.Rejected == ItemOwner.UserOnly && (search.UserId == gi.UserId || search.UserId == gi.Gallery!.UserId))))
                     )
                     && (search.MediaType == MediaType.All || search.MediaType == gi.Type)
                     && (search.ImageOrientation == ImageOrientation.All || search.ImageOrientation == gi.Orientation)

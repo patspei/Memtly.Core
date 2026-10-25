@@ -285,7 +285,7 @@ class MediaViewer {
 
             const element = $(e.currentTarget).closest('.media-viewer');
             const source = element.data('source');
-            this.download(source);
+            this.download(source.startsWith('/Media/Original/') ? `${source}?download=true` : source);
         });
     }
 
@@ -495,7 +495,7 @@ class MediaViewer {
 
         let a = document.createElement('a');
         a.href = source;
-        a.download = parts[parts.length - 1];
+        a.download = source.startsWith('/Media/Original/') ? '' : parts[parts.length - 1];
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

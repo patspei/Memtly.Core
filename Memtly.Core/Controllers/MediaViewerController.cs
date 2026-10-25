@@ -22,13 +22,12 @@ namespace Memtly.Core.Controllers
         private readonly IIdentityHelper _identity;
         private readonly ILogger _logger;
         private readonly IStringLocalizer<Localization.Translations> _localizer;
+        private readonly IMediaAccessHelper _mediaAccess;
 
         private readonly string RootDirectory;
-        private readonly string UploadsDirectory;
-        private readonly string ThumbnailsDirectory;
         private readonly string CustomResourcesDirectory;
 
-        public MediaViewerController(ISettingsHelper settings, IDatabaseHelper database, IIdentityHelper identity, ILogger<MediaViewerController> logger, IStringLocalizer<Localization.Translations> localizer)
+        public MediaViewerController(ISettingsHelper settings, IDatabaseHelper database, IIdentityHelper identity, ILogger<MediaViewerController> logger, IStringLocalizer<Localization.Translations> localizer, IMediaAccessHelper mediaAccess)
             : base()
         {
             _settings = settings;
@@ -36,10 +35,9 @@ namespace Memtly.Core.Controllers
             _identity = identity;
             _logger = logger;
             _localizer = localizer;
+            _mediaAccess = mediaAccess;
 
             RootDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!;
-            UploadsDirectory = Path.Combine(RootDirectory, Directories.Public.Uploads);
-            ThumbnailsDirectory = Path.Combine(RootDirectory, Directories.Public.Thumbnails);
             CustomResourcesDirectory = Path.Combine(RootDirectory, Directories.Public.CustomResources);
         }
 
@@ -57,9 +55,9 @@ namespace Memtly.Core.Controllers
                         var gallery = await _database.GetGallery(galleryItem.GalleryId);
                         if (gallery != null)
                         {
-                            secretKey = secretKey ?? string.Empty;
+                            // A missing key uses the already validated server session.
 
-                            if (!string.IsNullOrWhiteSpace(gallery.SecretKey) && !secretKey.Equals(gallery.SecretKey))
+                            if (!await _mediaAccess.CanAccessGallery(HttpContext, gallery, secretKey))
                             {
                                 Response.StatusCode = (int)HttpStatusCode.BadRequest;
                                 return Json(new { success = false, message = _localizer["Gallery_Invalid_Secret_Key"].Value });
@@ -67,7 +65,7 @@ namespace Memtly.Core.Controllers
 
                             var user = _identity.IsValid(User) ? User.Identity : null;
 
-                            if (galleryItem.State != GalleryItemState.Approved && !_identity.CanEdit(User, ReviewPermissions.View, galleryItem.UserId))
+                            if (!await _mediaAccess.CanRead(HttpContext, galleryItem))
                             {
                                 Response.StatusCode = (int)HttpStatusCode.BadRequest;
                                 return Json(new { success = false, message = _localizer["Access_Denied"].Value });
@@ -94,8 +92,8 @@ namespace Memtly.Core.Controllers
                             {
                                 Id = id,
                                 Collection = gallery.Name,
-                                Source = $"/{Path.Combine(UploadsDirectory, gallery.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{(galleryItem!.State == GalleryItemState.Pending ? "Pending/" : string.Empty)}{Uri.EscapeDataString(galleryItem.Title)}",
-                                Thumbnail = $"/{Path.Combine(ThumbnailsDirectory, gallery.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{Uri.EscapeDataString(Path.GetFileNameWithoutExtension(galleryItem.Title))}.webp",
+                                Source = $"/Media/Original/{galleryItem.Id}",
+                                Thumbnail = $"/Media/Thumbnail/{galleryItem.Id}",
                                 AuthorName = authorName,
                                 AuthorEmailAddress = authorEmailAddress,
                                 Type = galleryItem.MediaType.ToString().ToLower(),
@@ -114,7 +112,7 @@ namespace Memtly.Core.Controllers
                                     HasUserCommented = user != null ? await _database.CheckUserHasCommentedGalleryItem(galleryItem.Id, _identity.GetUserId(User)) : false,
                                     Comments = await _database.GetGalleryItemComments(id)
                                 },
-                                DownloadEnabled = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, gallery.Id) || _identity.IsPrivilegedUser(User)
+                                DownloadEnabled = await _mediaAccess.CanDownload(HttpContext, galleryItem)
                             });
                         }
                     }
@@ -184,9 +182,9 @@ namespace Memtly.Core.Controllers
                         var gallery = await _database.GetGallery(galleryItem.GalleryId);
                         if (gallery != null)
                         {
-                            secretKey = secretKey ?? string.Empty;
+                            // A missing key uses the already validated server session.
 
-                            if (!string.IsNullOrWhiteSpace(gallery.SecretKey) && !secretKey.Equals(gallery.SecretKey))
+                            if (!await _mediaAccess.CanAccessGallery(HttpContext, gallery, secretKey))
                             {
                                 Response.StatusCode = (int)HttpStatusCode.BadRequest;
                                 return Json(new { success = false, message = _localizer["Gallery_Invalid_Secret_Key"].Value });
@@ -194,7 +192,7 @@ namespace Memtly.Core.Controllers
 
                             var user = _identity.IsValid(User) ? User.Identity : null;
 
-                            if (!_identity.CanEdit(User, ReviewPermissions.View, galleryItem.UserId))
+                            if (!await _mediaAccess.CanRead(HttpContext, galleryItem))
                             {
                                 Response.StatusCode = (int)HttpStatusCode.BadRequest;
                                 return Json(new { success = false, message = _localizer["Access_Denied"].Value });
@@ -220,8 +218,8 @@ namespace Memtly.Core.Controllers
                             {
                                 Id = id,
                                 Collection = gallery.Name,
-                                Source = $"/{Path.Combine(UploadsDirectory, gallery.Identifier, "Pending").Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{Uri.EscapeDataString(galleryItem!.Title)}",
-                                Thumbnail = $"/{Path.Combine(ThumbnailsDirectory, gallery.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{Uri.EscapeDataString(Path.GetFileNameWithoutExtension(galleryItem.Title))}.webp",
+                                Source = $"/Media/Original/{galleryItem.Id}",
+                                Thumbnail = $"/Media/Thumbnail/{galleryItem.Id}",
                                 Title = null,
                                 Description = null,
                                 AuthorName = authorName,
@@ -250,7 +248,7 @@ namespace Memtly.Core.Controllers
                 try
                 {
                     var galleryItem = await _database.GetGalleryItem(id);
-                    if (galleryItem != null)
+                    if (galleryItem != null && await _mediaAccess.CanRead(HttpContext, galleryItem))
                     {
                         var likesEnabled = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Likes, true, galleryItem.GalleryId);
                         if (likesEnabled)
@@ -314,7 +312,7 @@ namespace Memtly.Core.Controllers
                         if (_identity.CanEdit(User, GalleryPermissions.Comment, userId))
                         {
                             var galleryItem = await _database.GetGalleryItem(id);
-                            if (galleryItem != null)
+                            if (galleryItem != null && await _mediaAccess.CanRead(HttpContext, galleryItem))
                             {
                                 var commentsEnabled = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Comments, true, galleryItem.GalleryId);
                                 if (commentsEnabled)

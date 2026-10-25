@@ -30,6 +30,7 @@ namespace Memtly.Core.Models.Database
     {
         public ItemOwner Pending { get; set; } = ItemOwner.None;
         public ItemOwner Approved { get; set; } = ItemOwner.None;
+        public ItemOwner Rejected { get; set; } = ItemOwner.None;
     }
 
     public enum ItemOwner

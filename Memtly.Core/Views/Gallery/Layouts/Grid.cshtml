@@ -1,4 +1,4 @@
-﻿@model Memtly.Core.Models.PhotoGallery
+@model Memtly.Core.Models.PhotoGallery
 
 @using System.Text.RegularExpressions
 @using Memtly.Core.Constants
@@ -145,7 +145,7 @@
                                 @if (Model?.Gallery != null && Model?.Gallery?.Id > 0 && (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, Model?.Gallery?.Id) || _identity.IsOwner(User, Model!.Gallery.Owner) || _identity.IsPrivilegedUser(User)))
                                 {
                                     <span class="header-actions">
-                                        <span class="btnDownloadGroup action link-primary-2 pointer" data-gallery-id="@Model?.Gallery?.Id" data-gallery-name="@Model?.Gallery?.Name" data-gallery-key="@Model?.SecretKey" data-group-name="@((int?)Model?.GroupBy)|@imageGroup.Key|@(Model?.FilterStateBy ?? GalleryItemState.All)" alt="@_localizer["Download"].Value">
+                                        <span class="btnDownloadGroup action link-primary-2 pointer" data-gallery-id="@Model?.Gallery?.Id" data-gallery-name="@Model?.Gallery?.Name" data-group-name="@((int?)Model?.GroupBy)|@imageGroup.Key|@(Model?.FilterStateBy ?? GalleryItemState.All)" alt="@_localizer["Download"].Value">
                                             <i class="fas fa-download"></i>
                                             <span>@_localizer["Download"].Value</span>
                                         </span>
@@ -164,7 +164,7 @@
                             var fallbackImage = image.MediaType == MediaType.Video ? "" : "";
 
                             <div class="media-viewer-card image-tile image-tile-@(image.Orientation.ToString().ToLower())">
-                                <a href="@image.ImagePath" class="media-viewer-item" data-media-viewer-id="@image.Id" data-media-viewer-secret-key="@Model?.Gallery?.SecretKey" data-media-viewer-collection="@imageGroup.Key" data-media-viewer-type="gallery_item">
+                                <a href="@image.ImagePath" class="media-viewer-item" data-media-viewer-id="@image.Id" data-media-viewer-collection="@imageGroup.Key" data-media-viewer-type="gallery_item">
                                     <img src="@image?.ThumbnailPath" class="shadow-1-strong" loading="lazy" onerror="this.onerror=null; this.src='@(image!.FallbackImagePath)'; this.closest('.media-viewer-item').querySelector('.media-viewer-play')?.remove();"/>
                                     @if (image?.MediaType == MediaType.Video)
                                     {

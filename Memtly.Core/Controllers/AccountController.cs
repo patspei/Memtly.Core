@@ -1026,7 +1026,12 @@ namespace Memtly.Core.Controllers
                                     _fileHelper.DeleteFileIfExists(thumbnailFile);
                                 }
 
-                                await _database.DeleteGalleryItem(review);
+                                if (retain)
+                                {
+                                    review.State = GalleryItemState.Rejected;
+                                    await _database.EditGalleryItem(review);
+                                }
+                                else await _database.DeleteGalleryItem(review);
 
                                 await _audit.LogAction(_identity.GetUserId(User), $"'{review.Title}' {_localizer["Audit_ItemRejectedInGallery"].Value} '{gallery.Identifier}'", AuditSeverity.Verbose);
                             }
@@ -1112,7 +1117,12 @@ namespace Memtly.Core.Controllers
                                             _fileHelper.DeleteFileIfExists(thumbnailFile);
                                         }
 
-                                        await _database.DeleteGalleryItem(review);
+                                        if (retain)
+                                        {
+                                            review.State = GalleryItemState.Rejected;
+                                            await _database.EditGalleryItem(review);
+                                        }
+                                        else await _database.DeleteGalleryItem(review);
 
                                         await _audit.LogAction(_identity.GetUserId(User), _localizer["Audit_BulkRejectReviews"].Value, AuditSeverity.Verbose);
                                     }
@@ -2784,7 +2794,7 @@ namespace Memtly.Core.Controllers
                                     }
                                     else
                                     {
-                                        await _audit.LogAction(_identity.GetUserId(User), $"{_localizer["Audit_SettingsUpdated"].Value} '{(!string.IsNullOrWhiteSpace(gallery?.Name) ? gallery.Name : "Gallery Defaults")}' - '{setting?.Id}'='{setting?.Value}'", AuditSeverity.Information);
+                                        await _audit.LogAction(_identity.GetUserId(User), $"{_localizer["Audit_SettingsUpdated"].Value} '{(!string.IsNullOrWhiteSpace(gallery?.Name) ? gallery.Name : "Gallery Defaults")}' - Setting '{setting?.Id}'", AuditSeverity.Information);
                                     }
                                 }
                                 catch (Exception ex)
@@ -2953,8 +2963,8 @@ namespace Memtly.Core.Controllers
                                 UploaderEmailAddress = x.UploaderEmailAddress,
                                 UploadDate = x.UploadedDate,
                                 CaptureDate = x.DateTaken ?? x.UploadedDate,
-                                ImagePath = $"/{Path.Combine(UploadsDirectory, gallery.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/Pending/{Uri.EscapeDataString(x.Title)}",
-                                ThumbnailPath = $"/{Path.Combine(ThumbnailsDirectory, gallery.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{Uri.EscapeDataString(Path.GetFileNameWithoutExtension(x.Title))}.webp",
+                                ImagePath = $"/Media/Original/{x.Id}",
+                                ThumbnailPath = $"/Media/Thumbnail/{x.Id}",
                                 FallbackImagePath = $"/_content/Memtly.Core/images/{(x.MediaType == MediaType.Video ? "BrokenVideo" : "BrokenImage")}.webp",
                                 Orientation = x.Orientation,
                                 MediaType = x.MediaType,

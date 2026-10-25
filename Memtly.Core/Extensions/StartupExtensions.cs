@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Memtly.Core.BackgroundWorkers;
 using Memtly.Core.Configurations;
 using Memtly.Core.Constants;
@@ -128,18 +128,16 @@ namespace Memtly.Core.Extensions
 
             app.UseCookiePolicy();
 
-            foreach (var dirName in $"{Directories.Public.Uploads},{Directories.Public.CustomResources},{Directories.Public.Thumbnails},{Directories.Public.TempFiles}".Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            app.UseMiddleware<PrivateMediaMiddleware>();
+            // Runtime media is never public static content. Keep only explicitly
+            // public branding resources on the static provider.
+            foreach (var dirName in new[] { Directories.Public.Uploads, Directories.Public.Thumbnails, Directories.Public.TempFiles, Directories.Public.CustomResources })
+                Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, dirName));
+            app.UseStaticFiles(new StaticFileOptions
             {
-                var dirPath = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, dirName);
-                Directory.CreateDirectory(dirPath);
-
-                app.UseStaticFiles(new StaticFileOptions
-                {
-                    FileProvider = new PhysicalFileProvider(dirPath),
-                    RequestPath = $"/{dirName}"
-                });
-            }
-
+                FileProvider = new PhysicalFileProvider(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, Directories.Public.CustomResources)),
+                RequestPath = $"/{Directories.Public.CustomResources}"
+            });
             foreach (var dirName in $"{Directories.Private.Config}".Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 var dirPath = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, dirName);

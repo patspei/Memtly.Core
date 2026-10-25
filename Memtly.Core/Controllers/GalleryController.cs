@@ -33,6 +33,8 @@ namespace Memtly.Core.Controllers
         private readonly IIdentityHelper _identity;
         private readonly ILogger _logger;
         private readonly IStringLocalizer<Localization.Translations> _localizer;
+        private readonly IMediaAccessHelper _mediaAccess;
+        private readonly GalleryDownloadHelper _downloads;
 
         private readonly string RootDirectory;
         private readonly string AssetsDirectory;
@@ -40,7 +42,7 @@ namespace Memtly.Core.Controllers
         private readonly string UploadsDirectory;
         private readonly string ThumbnailsDirectory;
 
-        public GalleryController(ISettingsHelper settings, IDatabaseHelper database, IFileHelper fileHelper, IDeviceDetector deviceDetector, IImageHelper imageHelper, INotificationHelper notificationHelper, IEncryptionHelper encryptionHelper, Helpers.IUrlHelper urlHelper, IIdentityHelper identity, ILogger<GalleryController> logger, IStringLocalizer<Localization.Translations> localizer)
+        public GalleryController(ISettingsHelper settings, IDatabaseHelper database, IFileHelper fileHelper, IDeviceDetector deviceDetector, IImageHelper imageHelper, INotificationHelper notificationHelper, IEncryptionHelper encryptionHelper, Helpers.IUrlHelper urlHelper, IIdentityHelper identity, ILogger<GalleryController> logger, IStringLocalizer<Localization.Translations> localizer, IMediaAccessHelper mediaAccess, GalleryDownloadHelper downloads)
             : base()
         {
             _settings = settings;
@@ -54,6 +56,8 @@ namespace Memtly.Core.Controllers
             _identity = identity;
             _logger = logger;
             _localizer = localizer;
+            _mediaAccess = mediaAccess;
+            _downloads = downloads;
 
             RootDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!;
             AssetsDirectory = Path.Combine(RootDirectory, Directories.Private.Assets);
@@ -216,6 +220,11 @@ namespace Memtly.Core.Controllers
                 GalleryModel? gallery = await _database.GetGallery(galleryId.Value);
                 if (gallery != null)
                 {
+                    // The action filter validates encrypted entry links; direct raw
+                    // credentials can also establish the same request/session grant.
+                    var rawKey = string.Equals(key, gallery.SecretKey, StringComparison.Ordinal) ? key : null;
+                    if (!await _mediaAccess.CanAccessGallery(HttpContext, gallery, rawKey))
+                        return StatusCode(StatusCodes.Status403Forbidden);
                     var galleryPath = Path.Combine(UploadsDirectory, gallery.Identifier);
                     _fileHelper.CreateDirectoryIfNotExists(galleryPath);
                     _fileHelper.CreateDirectoryIfNotExists(Path.Combine(galleryPath, "Pending"));
@@ -276,13 +285,13 @@ namespace Memtly.Core.Controllers
                     var itemsPerPage = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.ItemsPerPage, 50, gallery?.Id);
                     var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", gallery?.Id)).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
                     var showPendingUploads = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.ShowPendingUploads, true, gallery?.Id);
+                    var scope = await _mediaAccess.GetScope(HttpContext, gallery!);
 
                     var search = new GalleryItemSearch()
                     {
                         UserId = userId,
                         SearchTerm = term,
-                        CollectionIds = gallery!.Type == GalleryType.Collection ? new List<int>() { gallery!.Id } : null,
-                        GalleryIds = gallery!.Type != GalleryType.Collection ? new List<int>() { gallery!.Id } : null,
+                        GalleryIds = scope.Select(g => g.Id).ToList(),
                         ItemState = new GalleryItemStateFilter()
                         {
                             Pending = showPendingUploads && _identity.IsValid(User) ? (_identity.IsPrivilegedUser(User) ? ItemOwner.All : ItemOwner.UserOnly) : ItemOwner.None,
@@ -297,13 +306,12 @@ namespace Memtly.Core.Controllers
                         AllowedFileExtensions = allowedFileTypes
                     };
 
-                    var items = await _database.GetGalleryItems(search);
-                    search.ItemState = new GalleryItemStateFilter()
-                    {
-                        Pending = gallery!.Type == GalleryType.Drop ? (_identity.IsPrivilegedUser(User) ? ItemOwner.All : ItemOwner.UserOnly) : ItemOwner.All,
-                        Approved = gallery!.Type == GalleryType.Drop ? (_identity.IsPrivilegedUser(User) ? ItemOwner.All : ItemOwner.UserOnly) : ItemOwner.All
-                    };
-                    var itemCounts = await _database.GetGalleryItemCount(search);
+                    var candidates = scope.Count == 0 ? new List<GalleryItemModel>() : await _database.GetGalleryItems(search);
+                    var scopeIds = scope.Select(g => g.Id).ToHashSet();
+                    var items = new List<GalleryItemModel>();
+                    foreach (var item in candidates)
+                        if (scopeIds.Contains(item.GalleryId) && await _mediaAccess.CanRead(HttpContext, item)) items.Add(item);
+                    var itemCounts = scope.Count == 0 ? new Dictionary<string, int>() : await _database.GetGalleryItemCount(search);
 
                     if (_identity.IsBasicUser(User) && userId != gallery!.Owner)
                     {
@@ -370,8 +378,8 @@ namespace Memtly.Core.Controllers
                                 UploaderEmailAddress = x.UploaderEmailAddress,
                                 UploadDate = x.UploadedDate,
                                 CaptureDate = x.DateTaken ?? x.UploadedDate,
-                                ImagePath = $"/{Path.Combine(UploadsDirectory, galleryIdentifier!.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{(x!.State == GalleryItemState.Pending ? "Pending/" : string.Empty)}{Uri.EscapeDataString(x.Title)}",
-                                ThumbnailPath = $"/{Path.Combine(ThumbnailsDirectory, galleryIdentifier!.Identifier).Remove(RootDirectory).Replace('\\', '/').TrimStart('/')}/{Uri.EscapeDataString(Path.GetFileNameWithoutExtension(x.Title))}.webp",
+                                ImagePath = $"/Media/Original/{x.Id}",
+                                ThumbnailPath = $"/Media/Thumbnail/{x.Id}",
                                 FallbackImagePath = $"/_content/Memtly.Core/images/{(x.MediaType == MediaType.Video ? "BrokenVideo" : "BrokenImage")}.webp",
                                 Orientation = x.Orientation,
                                 MediaType = x.MediaType,
@@ -716,269 +724,16 @@ namespace Memtly.Core.Controllers
         [RequestTimeout("timeout_1h")]
         public async Task<IActionResult> DownloadGallery(int id, string? secretKey, string? group, List<string>? fileFilter)
         {
-            try
+            Response.Headers.CacheControl = "private, no-store, max-age=0";
+            var plan = await _downloads.Build(HttpContext, id, secretKey, group, fileFilter);
+            if (plan.StatusCode != StatusCodes.Status200OK)
             {
-                var userId = _identity.GetUserId(User);
-
-                var gallery = await _database.GetGallery(id);
-                if (gallery != null)
-                {
-                    secretKey = secretKey ?? string.Empty;
-
-                    if (!string.IsNullOrWhiteSpace(gallery.SecretKey) && !secretKey.Equals(gallery.SecretKey))
-                    {
-                        Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                        _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Invalid secret key provided: '{secretKey}'");
-                        return Json(new { success = false, message = _localizer["Failed_Download_Gallery_Invalid_Key"].Value });
-                    }
-
-                    if (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, gallery?.Id) || _identity.IsOwner(User, gallery!.Owner) || _identity.IsPrivilegedUser(User))
-                    {
-                        var galleryDirs = new List<string>();
-
-                        if (gallery!.Identifier.Equals(SystemGalleries.AllGallery, StringComparison.OrdinalIgnoreCase))
-                        {
-                            var galleryDir = UploadsDirectory;
-                            if (_fileHelper.DirectoryExists(galleryDir))
-                            {
-                                galleryDirs.Add(galleryDir);
-                            }
-                            else
-                            {
-                                _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Failed to find gallery directory at '{galleryDir}'");
-                            }
-                        }
-                        else if (gallery!.Type != GalleryType.Collection)
-                        {
-                            var galleryDir = Path.Combine(UploadsDirectory, gallery!.Identifier);
-                            if (_fileHelper.DirectoryExists(galleryDir))
-                            {
-                                galleryDirs.Add(galleryDir);
-                            }
-                            else
-                            {
-                                _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Failed to find gallery directory at '{galleryDir}'");
-                            }
-                        }
-                        else if (gallery!.Type == GalleryType.Collection)
-                        {
-                            if (gallery?.CollectionItems != null)
-                            {
-                                foreach (var galleryId in gallery.CollectionItems)
-                                {
-                                    var gal = await _database.GetGallery(galleryId);
-                                    if (gal != null)
-                                    {
-                                        var galleryDir = Path.Combine(UploadsDirectory, gal!.Identifier);
-                                        if (_fileHelper.DirectoryExists(galleryDir))
-                                        {
-                                            galleryDirs.Add(galleryDir);
-                                        }
-                                        else
-                                        {
-                                            _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Failed to find gallery directory at '{galleryDir}'");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (galleryDirs != null && galleryDirs.Any())
-                        {
-                            fileFilter = fileFilter ?? new List<string>();
-
-                            var filterDropItems = gallery!.Type == GalleryType.Drop && _identity.IsBasicUser(User) && userId != gallery!.Owner;
-                            if (filterDropItems && string.IsNullOrWhiteSpace(group))
-                            {
-                                group = $"{(int)GalleryGroup.None}|DropItemsOnly|{GalleryItemState.Approved}";
-                            }
-
-                            var showPendingUploads = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.ShowPendingUploads, true, gallery?.Id);
-
-                            if (!string.IsNullOrWhiteSpace(group))
-                            {
-                                try
-                                {
-                                    var groupParts = group.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                                    if (groupParts != null && groupParts.Length == 3)
-                                    {
-                                        var tempFilter = fileFilter;
-                                        fileFilter = new List<string>();
-
-                                        var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", gallery?.Id)).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-
-                                        IEnumerable<GalleryItemModel>? galleryItems = await _database.GetGalleryItems(new GalleryItemSearch()
-                                        {
-                                            UserId = userId,
-                                            //SearchTerm = term,
-                                            CollectionIds = gallery!.Type == GalleryType.Collection ? new List<int>() { gallery!.Id } : null,
-                                            GalleryIds = gallery!.Type != GalleryType.Collection ? new List<int>() { gallery!.Id } : null,
-                                            ItemState = new GalleryItemStateFilter()
-                                            {
-                                                Pending = showPendingUploads && _identity.IsValid(User) ? (_identity.IsPrivilegedUser(User) ? ItemOwner.All : ItemOwner.UserOnly) : ItemOwner.None,
-                                                Approved = gallery!.Type == GalleryType.Drop ? ItemOwner.UserOnly : ItemOwner.All
-                                            },
-                                            //MediaType = mediaType,
-                                            //ImageOrientation = orientation,
-                                            //GroupBy = galleryGroup,
-                                            //OrderBy = galleryOrder,
-                                            AllowedFileExtensions = allowedFileTypes
-                                        });
-
-                                        if (_identity.IsBasicUser(User) && userId != gallery!.Owner)
-                                        {
-                                            galleryItems = galleryItems.Where(x => (gallery!.Type != GalleryType.Drop && x.State == GalleryItemState.Approved) || (x.UserId != null && x.UserId == userId)).ToList();
-                                        }
-
-                                        if (((int)GalleryGroup.None).ToString().Equals(groupParts[0]))
-                                        {
-                                            fileFilter.AddRange(galleryItems.Select(x => x.Title).Where(x => tempFilter == null || !tempFilter.Any() || tempFilter.Contains(x)));
-                                        }
-                                        else
-                                        {
-                                            fileFilter.AddRange(string.Empty);
-
-                                            foreach (GalleryGroup type in Enum.GetValues(typeof(GalleryGroup)))
-                                            {
-                                                if (((int)type).ToString().Equals(groupParts[0]))
-                                                {
-                                                    try
-                                                    {
-                                                        IEnumerable<IGrouping<string, GalleryItemModel>>? filtered = null;
-                                                        switch (type)
-                                                        {
-                                                            case GalleryGroup.Gallery:
-                                                                filtered = galleryItems?.GroupBy(x => x.GalleryName);
-                                                                break;
-                                                            case GalleryGroup.DateUploaded:
-                                                                filtered = galleryItems?.GroupBy(x => x.UploadedDate.ToLocalTime().ToString("dddd, d MMMM yyyy"));
-                                                                break;
-                                                            case GalleryGroup.DateTaken:
-                                                                filtered = galleryItems?.GroupBy(x => (x.DateTaken ?? x.UploadedDate).ToLocalTime().ToString("dddd, d MMMM yyyy"));
-                                                                break;
-                                                            case GalleryGroup.MediaType:
-                                                                filtered = galleryItems?.GroupBy(x => x.MediaType.ToString());
-                                                                break;
-                                                            case GalleryGroup.Uploader:
-                                                                filtered = galleryItems?.GroupBy(x => x.UploadedBy ?? "Anonymous");
-                                                                break;
-                                                        }
-
-                                                        if (filtered != null)
-                                                        {
-                                                            foreach (var f in filtered)
-                                                            {
-                                                                if (f.Key.Equals(groupParts[1]))
-                                                                {
-                                                                    if (f.Any())
-                                                                    {
-                                                                        fileFilter.AddRange(f.Select(x => x.Title).Where(x => tempFilter == null || !tempFilter.Any() || tempFilter.Contains(x)));
-                                                                    }
-
-                                                                    break;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    catch { }
-
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Invalid group format detected");
-                                        return Json(new { success = false, message = _localizer["Failed_Download_Gallery"].Value });
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogWarning(ex, $"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Failed to parse gallery download listing - {ex?.Message}");
-                                }
-                            }
-
-                            var archieveName = $"{gallery!.Identifier ?? "Memtly"}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.zip";
-
-                            var listing = new List<ZipListing>();
-                            var scanners = new List<ZipListingScanner>();
-
-                            foreach (var galleryDir in galleryDirs)
-                            {
-                                scanners.Add(new ZipListingScanner("Approved", galleryDir, SearchOption.TopDirectoryOnly));
-
-                                if (_identity.IsOwner(User, gallery.Owner) || _identity.IsPrivilegedUser(User))
-                                {
-                                    scanners.Add(new ZipListingScanner("Pending", Path.Combine(galleryDir, "Pending"), SearchOption.TopDirectoryOnly));
-                                    scanners.Add(new ZipListingScanner("Rejected", Path.Combine(galleryDir, "Rejected"), SearchOption.TopDirectoryOnly));
-                                }
-                                else if (showPendingUploads)
-                                {
-                                    scanners.Add(new ZipListingScanner("Pending", Path.Combine(galleryDir, "Pending"), SearchOption.TopDirectoryOnly));
-                                }
-                            }
-
-                            foreach (var scanner in scanners)
-                            {
-                                try
-                                {
-                                    var files = Directory.GetFiles(scanner.Path, "*", scanner.SearchOption);
-                                    if (fileFilter != null && fileFilter.Any())
-                                    {
-                                        files = files.Where(x => fileFilter.Exists(y => Path.GetFileName(y).Equals(Path.GetFileName(x), StringComparison.OrdinalIgnoreCase))).ToArray();
-                                    }
-
-                                    if (files != null && files.Any())
-                                    {
-                                        listing.Add(new ZipListing(scanner.Path, files, scanner.Name));
-                                    }
-                                }
-                                catch { }
-                            }
-
-                            if (listing != null && listing.Count > 0)
-                            {
-                                if (listing.GroupBy(x => x.Directory).Count() == 1)
-                                {
-                                    listing = listing.Select(x => new ZipListing(x.SourcePath, x.Files)).ToList();
-                                }
-
-                                return await ZipFileResponse(archieveName, listing);
-                            }
-                            else
-                            {
-                                _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Listing was empty'");
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Group: '{group}', File Filter: '{string.Join(',', fileFilter ?? [])}' - Failed to find gallery directories'");
-                        }
-                    }
-                    else
-                    {
-                        Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                        _logger.LogWarning($"{_localizer["Download_Gallery_Not_Allowed"].Value} - {id}");
-                        return Json(new { success = false, message = _localizer["Download_Gallery_Not_Allowed"].Value });
-                    }
-                }
-                else
-                {
-                    Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                    _logger.LogWarning($"{_localizer["Failed_Download_Gallery"].Value} - Gallery Id: {id}, Gallery Identifier: '{gallery?.Identifier}', Gallery Name: '{gallery?.Name}'");
-                    return Json(new { success = false, message = _localizer["Failed_Download_Gallery"].Value });
-                }
+                // Log identifiers/status only. Never log credentials or arbitrary client input.
+                _logger.LogWarning("Gallery download rejected. GalleryId={GalleryId}, Status={Status}", id, plan.StatusCode);
+                return StatusCode(plan.StatusCode, new { success = false });
             }
-            catch (Exception ex)
-            {
-                Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                _logger.LogError(ex, $"{_localizer["Failed_Download_Gallery"].Value} - {ex?.Message}");
-            }
-
-            return Json(new { success = false });
+            return await ZipFileResponse(plan.FileName, plan.Files);
         }
-
         [HttpGet]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public string GenerateSecretKey()
