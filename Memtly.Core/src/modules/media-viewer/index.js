@@ -50,7 +50,8 @@ class MediaViewer {
             e.stopPropagation();
 
             const elem = $(e.currentTarget);
-            const checkbox = elem.find('.btn-multi-select');
+            if (this.mobileLightboxDisabled()) return;
+            const checkbox = elem.closest('.media-viewer-card').find('.btn-multi-select');
 
             if (e.ctrlKey) {
                 this.toggleMultiSelectOption(checkbox);
@@ -280,18 +281,33 @@ class MediaViewer {
     }
 
     bindDownloadButton() {
+        $(document).off('click', '.btn-download-photo').on('click', '.btn-download-photo', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.confirmSingleDownload(`/Media/Original/${$(e.currentTarget).attr('data-media-id')}`);
+        });
+
         $(document).off('click', '.media-viewer-download').on('click', '.media-viewer-download', (e) => {
             e.preventDefault();
             e.stopPropagation();
 
             const element = $(e.currentTarget).closest('.media-viewer');
             const source = element.data('source');
-            const id = source.match(/^\/Media\/Original\/(\d+)/)?.[1];
-            if (!id) return;
-            $.getJSON(`/Media/DownloadInfo/${id}`)
-                .done(info => confirmDownload(info, () => this.download(`${source}?download=true`)))
-                .fail(showDownloadError);
+            this.confirmSingleDownload(source);
         });
+    }
+
+    confirmSingleDownload(source) {
+        const id = source?.match(/^\/Media\/Original\/(\d+)/)?.[1];
+        if (!id) return;
+        $.getJSON(`/Media/DownloadInfo/${id}`)
+            .done(info => confirmDownload(info, () => this.download(`/Media/Original/${id}?download=true`)))
+            .fail(showDownloadError);
+    }
+
+    mobileLightboxDisabled() {
+        return document.body.classList.contains('wedding-public') &&
+            window.matchMedia('(max-width: 767px), (hover: none) and (pointer: coarse)').matches;
     }
 
     bindPageEndEvent() {
@@ -317,6 +333,7 @@ class MediaViewer {
     }
 
     openMediaViewer(e) {
+        if (this.mobileLightboxDisabled()) return;
         const id = $(e).data('media-viewer-id');
         const index = $(e).data('media-viewer-index');
         const type = $(e).data('media-viewer-type');

@@ -19,6 +19,12 @@ export function confirmDownload(info, proceed) {
         <p>${info.bytes >= 500000000 ? 'Großer Download: Am besten über WLAN herunterladen. ' : ''}Bei ZIP-Archiven kann die Größe etwas abweichen. Die Vorbereitung kann einen Moment dauern.</p>
         <div class="wedding-dialog-actions"><button type="button" class="wedding-button wedding-button-outline" data-cancel>Abbrechen</button><button type="button" class="wedding-button" data-confirm>Herunterladen</button></div>`;
     document.body.append(dialog);
+    if (info.filename) {
+        const filename = document.createElement('p');
+        filename.className = 'download-filename';
+        filename.textContent = info.filename;
+        dialog.querySelector('.download-total').before(filename);
+    }
     dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
     dialog.querySelector('[data-confirm]').onclick = () => { dialog.close(); proceed(); };
     dialog.addEventListener('close', () => dialog.remove(), { once: true });

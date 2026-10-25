@@ -3,37 +3,22 @@
     <section class="wedding-hero" aria-labelledby="wedding-title">
         <img src="@Model.HeroImage" alt="Ein Moment voller Vorfreude" fetchpriority="high" />
         <div class="wedding-hero-copy">
-            <p class="wedding-eyebrow">@Model.Couple</p>
             <h1 id="wedding-title">Unsere Hochzeit</h1>
-            <p>Ein Tag voller Liebe. Erinnerungen für immer.</p>
-            <a class="wedding-button wedding-button-light" href="#erinnerungen">Unsere Erinnerungen entdecken <span aria-hidden="true">↓</span></a>
         </div>
-        <span class="wedding-hero-note">Für immer beginnt mit uns.</span>
     </section>
     <section class="wedding-intro" id="erinnerungen">
         <p class="wedding-eyebrow">Die schönsten Momente bleiben</p>
         <h2>Unser Tag. Eure Perspektive.</h2>
-        <p>Wie schön, dass ihr Teil unserer Geschichte seid. Hier sammeln wir die großen Gefühle und die kleinen Augenblicke unserer Hochzeit — zum Wiedererleben, Herunterladen und Teilen.</p>
+        <p>Wie schön, dass ihr Teil unserer Geschichte seid. Hier sammeln wir die großen Gefühle und die kleinen Augenblicke unserer Hochzeit - zum Wiedererleben, Herunterladen und Teilen.</p>
     </section>
     <section class="wedding-cards" aria-label="Unsere Galerien">
         <a class="wedding-card" href="/Wedding/Gallery/professional">
-            <div class="wedding-card-photo"><img src="@Model.HeroImage" alt="" loading="lazy" /><span>01 / Die großen Gefühle</span></div>
-            <div class="wedding-card-copy"><h3>Unsere Hochzeit</h3><p>Unsere professionellen Hochzeitsfotos. Zum Genießen und Behalten.</p><span>Galerie entdecken ↗</span></div>
+            <div class="wedding-card-photo"><img src="@(string.IsNullOrWhiteSpace(Model.GalleryCardImage) ? Model.HeroImage : Model.GalleryCardImage)" alt="" loading="lazy" /></div>
+            <div class="wedding-card-copy"><h3>Unsere Galerie</h3><p>Entdeckt die schönsten Erinnerungen an unseren Hochzeitstag.</p><span>Galerie entdecken ↗</span></div>
         </a>
-        <a class="wedding-card" href="/Wedding/Gallery/guests">
-            <div class="wedding-card-photo wedding-card-photo-guests"><img src="@Model.HeroImage" alt="" loading="lazy" /><span>02 / Mit euren Augen</span></div>
-            <div class="wedding-card-copy"><h3>Eure Hochzeitsfotos</h3><p>All die Momente, die ihr für uns eingefangen habt. Nach unserer Freigabe für alle.</p><span>Erinnerungen ansehen ↗</span></div>
-        </a>
-        <a class="wedding-card" href="/Wedding/Gallery/private#share-photos">
-            <div class="wedding-card-private"><span class="wedding-monogram">J <em>&</em> P</span><span>03 / Nur für uns</span></div>
-            <div class="wedding-card-copy"><h3>Nur für Julia &amp; Patrick</h3><p>Ein persönlicher Augenblick oder ein lieber Gruß. Diese Fotos bleiben bei uns.</p><span>Privat mit uns teilen ↗</span></div>
-        </a>
-    </section>
-    <section class="wedding-share">
-        <p class="wedding-eyebrow">Eure Erinnerungen machen uns glücklich</p>
-        <h2>Zeigt uns euren Blick auf unseren Tag.</h2>
-        <p>Handyfotos, Schnappschüsse und Lieblingsmomente — wir freuen uns auf eure Bilder.</p>
-        <button type="button" class="wedding-button" data-wedding-share>Eigene Fotos teilen <span aria-hidden="true">↗</span></button>
-        <small>Ganz einfach. Ohne Registrierung.</small>
+        <button type="button" class="wedding-card" data-wedding-share>
+            <span class="wedding-card-photo"><img src="@(string.IsNullOrWhiteSpace(Model.UploadCardImage) ? Model.HeroImage : Model.UploadCardImage)" alt="" loading="lazy" /></span>
+            <span class="wedding-card-copy"><span class="wedding-card-title">Handyfotos hochladen</span><span class="wedding-card-description">Teilt eure Erinnerungen mit allen oder ganz privat mit uns.</span><span class="wedding-card-action">Fotos teilen ↗</span></span>
+        </button>
     </section>
 </main>

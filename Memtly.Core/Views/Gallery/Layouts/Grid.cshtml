@@ -3,6 +3,7 @@
 @using System.Text.RegularExpressions
 @using Memtly.Core.Constants
 @inject Microsoft.Extensions.Configuration.IConfiguration WeddingConfiguration
+@inject Memtly.Core.Helpers.IMediaAccessHelper MediaAccess
 
 @{
     var userPermissions = User?.Identity?.GetUserPermissions() ?? new Permissions();
@@ -179,9 +180,18 @@
                                             </g>
                                         </svg>
                                     }
+                                </a>
                                     @if (canGuestDownload || (_identity.IsValid(User) && userPermissions.Gallery.HasFlag(GalleryPermissions.Download)))
                                     {
                                         <button type="button" class="fa fa-square btn-multi-select" data-id="@image?.Name" aria-label="Foto auswählen" aria-pressed="false"></button>
+                                    }
+                                    @if (wedding.Enabled && await MediaAccess.CanDownload(Context, new Memtly.Core.Models.Database.GalleryItemModel
+                                    {
+                                        Id = image.Id, GalleryId = image.GalleryId ?? Model!.Gallery!.Id,
+                                        UserId = image.UploaderId, State = image.State
+                                    }))
+                                    {
+                                        <button type="button" class="btn-download-photo" data-media-id="@image.Id" aria-label="Dieses Foto herunterladen"><i class="fas fa-download" aria-hidden="true"></i></button>
                                     }
                                     @if (_identity.IsValid(User))
                                     {
@@ -190,7 +200,6 @@
                                             <i class="fa fa-trash btnDeletePhoto btn-delete-item d-lg-none" data-photo-id="@image?.Id" data-photo-name="@image?.Name"></i>
                                         }
                                     }
-                                </a>
                             </div>
                         }
                     </div>

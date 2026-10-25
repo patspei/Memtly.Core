@@ -8,6 +8,8 @@
     opacity: 0;
 }
 
+.media-viewer-card:hover > .btnDeletePhoto { display: block !important; }
+
 #media-viewer-wrapper {
     background-color: rgba(0, 0, 0, 0.5);
     width: 100%;

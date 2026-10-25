@@ -19,7 +19,7 @@ public sealed class MediaController(IDatabaseHelper database, IMediaAccessHelper
         if (item == null || !await access.CanDownload(HttpContext, item)) return NotFound();
         var gallery = await database.GetGallery(item.GalleryId);
         var path = gallery == null ? null : files.GetPath(gallery, item);
-        return path == null ? NotFound() : Json(new { count = 1, bytes = new FileInfo(path).Length });
+        return path == null ? NotFound() : Json(new { count = 1, bytes = new FileInfo(path).Length, filename = item.Title });
     }
     [HttpGet("/Media/Original/{id:int}")]
     [HttpHead("/Media/Original/{id:int}")]

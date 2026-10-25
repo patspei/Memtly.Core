@@ -81,7 +81,7 @@
 }
 
 <!DOCTYPE html>
-<html lang="@(weddingPublic ? "de" : "en")">
+<html lang="@(weddingPublic ? "de" : "en")" class="@(weddingPublic ? "wedding-page" : "")">
     <head>
         <title>@(weddingPublic ? wedding.Couple + " · Unsere Hochzeit" : title)</title>
         <link rel="icon" type="@(weddingPublic ? "image/svg+xml" : "image/png")" href="@(weddingPublic ? "/_content/Memtly.Core/images/wedding-icon.svg" : logo)" />

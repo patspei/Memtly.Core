@@ -49,6 +49,14 @@
     ViewBag.QRCodeLink = _url.GenerateFullUrl(Context.Request, Context.Request.Path, qrAppend, qrExclude);
 }
 
+@if (wedding.Enabled && Model?.Gallery != null)
+{
+    <nav class="wedding-gallery-nav" aria-label="Fotogalerien">
+        <a href="/Wedding/Gallery/professional" aria-current="@(wedding.IsProfessional(Model.Gallery) ? "page" : null)">Fotos der Fotografin</a>
+        <a href="/Wedding/Gallery/guests" aria-current="@(wedding.NeedsReview(Model.Gallery) ? "page" : null)">Fotos unserer Gäste</a>
+    </nav>
+}
+
 @if (Model?.Gallery != null && Model?.UploadActivated != null && Model.UploadActivated && !wedding.IsProfessional(Model.Gallery) && Model.ViewMode != ViewMode.Presentation && Model.ViewMode != ViewMode.Slideshow)
 {
     var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", Model?.Gallery?.Id))?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)?.Select(x => $".{x.Trim('.')}")?.OrderBy(x => x)?.ToList() ?? new List<string>();
@@ -93,8 +101,6 @@
     <div class="wedding-download-bar" aria-label="Fotos herunterladen">
         <button type="button" class="btnDownloadSelected wedding-button" data-gallery-id="@Model.Gallery.Id">Auswahl herunterladen</button>
         <button type="button" class="btnDownloadGallery wedding-button wedding-button-outline" data-gallery-id="@Model.Gallery.Id">Alle Fotos herunterladen</button>
-        <button type="button" class="btn-multi-select-all wedding-button wedding-button-outline">Alle auf dieser Seite auswählen</button>
-        <button type="button" class="btn-multi-deselect-all wedding-button wedding-button-outline d-none">Auswahl aufheben</button>
     </div>
 }
 

@@ -89,6 +89,7 @@ public class MediaSecurityTests
         });
 
         host = WebHost.CreateDefaultBuilder()
+            .ConfigureAppConfiguration(builder => builder.AddInMemoryCollection(new Dictionary<string, string?> { ["Wedding:Enabled"] = "true" }))
             .UseKestrel(options => options.Listen(IPAddress.Loopback, 0))
             .UseContentRoot(root).UseWebRoot("wwwroot")
             .ConfigureLogging(logging => logging.ClearProviders())
@@ -112,6 +113,7 @@ public class MediaSecurityTests
                 services.AddSingleton(Substitute.For<INotificationHelper>());
                 services.AddSingleton(Substitute.For<IEncryptionHelper>());
                 services.AddSingleton(Substitute.For<Memtly.Core.Helpers.IUrlHelper>());
+                services.AddSingleton(Substitute.For<IConfigHelper>());
             })
             .Configure(app =>
             {
@@ -204,6 +206,7 @@ public class MediaSecurityTests
             var info = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
             Assert.That(info.GetProperty("count").GetInt32(), Is.EqualTo(1));
             Assert.That(info.GetProperty("bytes").GetInt64(), Is.EqualTo("APPROVED-PUBLIC".Length));
+            Assert.That(info.GetProperty("filename").GetString(), Is.EqualTo("approved.jpg"));
         }
     }
 
@@ -473,6 +476,59 @@ public class MediaSecurityTests
         using var client = Client("1:Admin");
         Assert.That((await Download(client, 1, ("fileFilter[0]", name))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That((await client.GetAsync("/Media/Original/8")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    private async Task<string> Render(string path, object model)
+    {
+        using var scope = host.Services.CreateScope();
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        var action = new Microsoft.AspNetCore.Mvc.ActionContext(context, new Microsoft.AspNetCore.Routing.RouteData(), new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor());
+        var engine = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Mvc.Razor.IRazorViewEngine>();
+        var result = engine.GetView(null, path, false);
+        Assert.That(result.Success, Is.True, path);
+        using var writer = new StringWriter();
+        var data = new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(new Microsoft.AspNetCore.Mvc.ModelBinding.EmptyModelMetadataProvider(), new Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary()) { Model = model };
+        var temp = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(context, scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider>());
+        await result.View.RenderAsync(new Microsoft.AspNetCore.Mvc.Rendering.ViewContext(action, result.View, data, temp, writer, new Microsoft.AspNetCore.Mvc.ViewFeatures.HtmlHelperOptions()));
+        return writer.ToString();
+    }
+
+    [TestCase(null, null)]
+    [TestCase("/custom_resources/hochzeit-galerie.jpg", "/custom_resources/hochzeit-upload.jpg")]
+    public async Task WeddingHomeRendersTwoCardsAndConfiguredImages(string? galleryImage, string? uploadImage)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Wedding:HeroImage"] = "/hero.jpg", ["Wedding:GalleryCardImage"] = galleryImage, ["Wedding:UploadCardImage"] = uploadImage
+        }).Build();
+        var html = await Render("/Views/Home/Wedding.cshtml", Models.WeddingOptions.Read(configuration));
+        Assert.That(System.Text.RegularExpressions.Regex.Matches(html, "class=\"wedding-card\"").Count, Is.EqualTo(2));
+        Assert.That(html, Does.Contain("<h1 id=\"wedding-title\">Unsere Hochzeit</h1>"));
+        Assert.That(html, Does.Contain("src=\"/hero.jpg\""));
+        Assert.That(html, Does.Contain($"src=\"{galleryImage ?? "/hero.jpg"}\""));
+        Assert.That(html, Does.Contain($"src=\"{uploadImage ?? "/hero.jpg"}\""));
+        Assert.That(html, Does.Contain("Unsere Galerie").And.Contain("Handyfotos hochladen"));
+        Assert.That(html, Does.Contain("class=\"wedding-card\" data-wedding-share"));
+        Assert.That(html, Does.Not.Contain("wedding-hero-note").And.Not.Contain("wedding-share\""));
+    }
+
+    [TestCase(1, true)]
+    [TestCase(3, false)]
+    public async Task WeddingGridSeparatesControlsAndHidesUnauthorizedDropDownloads(int galleryId, bool downloadAllowed)
+    {
+        var item = items.First(i => i.GalleryId == galleryId && i.State == GalleryItemState.Approved);
+        var model = new Models.PhotoGallery { Gallery = galleries[galleryId], Images =
+        [new Models.PhotoGalleryImage { Id = item.Id, GalleryId = item.GalleryId, Name = item.Title,
+            UploaderId = item.UserId, State = item.State, MediaType = MediaType.Image,
+            ImagePath = $"/Media/Original/{item.Id}", ThumbnailPath = "/thumbnail.jpg" }] };
+        var html = await Render("/Views/Gallery/Layouts/Grid.cshtml", model);
+        Assert.That(html.Contains("btn-download-photo"), Is.EqualTo(downloadAllowed));
+        Assert.That(System.Text.RegularExpressions.Regex.IsMatch(html, "<a[^>]*>[\\s\\S]*?<button[^>]*>[\\s\\S]*?</a>"), Is.False);
+        Assert.That(html, Does.Contain("image-container-masonry"));
+        if (downloadAllowed)
+        {
+            Assert.That(html, Does.Contain("aria-pressed=\"false\"").And.Contain($"data-media-id=\"{item.Id}\""));
+        }
     }
 
     [OneTimeTearDown]
