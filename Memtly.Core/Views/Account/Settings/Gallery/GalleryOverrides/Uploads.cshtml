@@ -77,7 +77,7 @@
         <div class="row mb-4 mb-lg-4 setting-container setting-advanced">
             <div class="col-12">
                 <label class="setting-label">@_localizer["Settings_Gallery_AllowedFileTypes_Label"].Value</label>
-                <input class="setting-field form-control" data-setting-name="@MemtlyConfiguration.Gallery.AllowedFileTypes" placeholder=".jpg,.jpeg,.png,.mp4,.mov" value="@Model.Settings.GetValue(MemtlyConfiguration.Gallery.AllowedFileTypes.ToUpper(), string.Empty)" type="text" />
+                <input class="setting-field form-control" data-setting-name="@MemtlyConfiguration.Gallery.AllowedFileTypes" placeholder=".jpg,.jpeg,.png,.mp4,.mov,.heic,.heif,.webp" value="@Model.Settings.GetValue(MemtlyConfiguration.Gallery.AllowedFileTypes.ToUpper(), string.Empty)" type="text" />
                 <div class="setting-hint form-text">@_localizer["Settings_Gallery_AllowedFileTypes_Help"].Value</div>
             </div>
         </div>
