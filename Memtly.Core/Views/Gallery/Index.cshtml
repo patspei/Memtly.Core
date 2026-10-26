@@ -2,6 +2,7 @@
 @using Memtly.Core.Constants
 @inject Memtly.Core.Helpers.IUrlHelper _url
 @inject Microsoft.Extensions.Configuration.IConfiguration WeddingConfiguration
+@inject Memtly.Core.Helpers.IMediaAccessHelper MediaAccess
 
 @{
     var wedding = Memtly.Core.Models.WeddingOptions.Read(WeddingConfiguration);
@@ -58,7 +59,20 @@
     </nav>
 }
 
-@if (Model?.Gallery != null && Model.UploadActivated && Model.ViewMode != ViewMode.Presentation && Model.ViewMode != ViewMode.Slideshow)
+@if (Model?.Gallery != null
+    && Model.ViewMode != ViewMode.Presentation
+    && Model.ViewMode != ViewMode.Slideshow
+    && (
+        (wedding.IsProfessional(Model.Gallery)
+            && MediaAccess.CanManage(Context, Model.Gallery)
+            && await _settings.GetOrDefault(
+                MemtlyConfiguration.Gallery.Upload,
+                true,
+                Model.Gallery.Id))
+        ||
+        (!wedding.IsProfessional(Model.Gallery)
+            && Model.UploadActivated == true)
+    ))
 {
     var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov", Model?.Gallery?.Id))?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)?.Select(x => $".{x.Trim('.')}")?.OrderBy(x => x)?.ToList() ?? new List<string>();
     var weddingUpload = wedding.IsWedding(Model.Gallery);
