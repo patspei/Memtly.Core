@@ -367,6 +367,11 @@ namespace Memtly.Core.Controllers
                         }
                     }
 
+                    // Photographer uploads are admin-only and independent of guest
+                    // upload settings and periods. The view uses the same policy.
+                    if (wedding.IsProfessional(gallery!))
+                        uploadActvated = await CanUploadWeddingGallery(gallery!, wedding);
+
                     var galleryIdentifiers = gallery!.Type != GalleryType.Collection ? new Dictionary<int, GalleryIdentifierModel?>() { { gallery.Id, new GalleryIdentifierModel(gallery.Id, gallery.Identifier, gallery.Name) } } : items?.GroupBy(x => x.GalleryId)?.Select(x => new KeyValuePair<int, GalleryIdentifierModel?>(x.Key, _database.GetGalleryIdentifier(x.Key).Result))?.ToDictionary();
                     var model = new PhotoGallery()
                     {
@@ -436,6 +441,14 @@ namespace Memtly.Core.Controllers
             return await ErrorResponse(ErrorCode.InvalidGalleryId);
         }
 
+        private async Task<bool> CanUploadWeddingGallery(GalleryModel gallery, WeddingOptions wedding, int collectionId = 0)
+        {
+            if (!wedding.ValidType(gallery) || collectionId > 0) return false;
+            if (wedding.IsProfessional(gallery))
+                return _identity.IsValid(User) && _identity.GetUserLevel(User) == UserLevel.Admin;
+            return await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, true, gallery.Id);
+        }
+
         [HttpPost]
         [RequestSizeLimit(64 * 1024 * 1024)]
         [RequestFormLimits(MemoryBufferThreshold = 64 * 1024, MultipartBodyLengthLimit = 64 * 1024 * 1024, ValueLengthLimit = 4096)]
@@ -468,9 +481,7 @@ namespace Memtly.Core.Controllers
                 if (gallery != null)
                 {
                     var wedding = WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
-                    if (wedding.IsWedding(gallery) && (!wedding.ValidType(gallery) || request.CollectionId > 0 ||
-                        (wedding.IsProfessional(gallery) && !_mediaAccess.CanManage(HttpContext, gallery)) ||
-                        !await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, true, gallery.Id)))
+                    if (wedding.IsWedding(gallery) && !await CanUploadWeddingGallery(gallery, wedding, request.CollectionId))
                         return StatusCode(403, new { success = false, errors = new[] { "Uploads sind in dieser Galerie nicht erlaubt." } });
                     if (galleryType == GalleryType.Collection && (!string.IsNullOrWhiteSpace(collection?.SecretKey) && !string.Equals(collection?.SecretKey, request.SecretKey)))
                     {
@@ -720,9 +731,7 @@ namespace Memtly.Core.Controllers
                 if (gallery != null)
                 {
                     var wedding = WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
-                    if (wedding.IsWedding(gallery) && (!wedding.ValidType(gallery) || request.CollectionId > 0 ||
-                        (wedding.IsProfessional(gallery) && !_mediaAccess.CanManage(HttpContext, gallery)) ||
-                        !await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, true, gallery.Id)))
+                    if (wedding.IsWedding(gallery) && !await CanUploadWeddingGallery(gallery, wedding, request.CollectionId))
                         return StatusCode(403, new { success = false, errors = new[] { "Uploads sind in dieser Galerie nicht erlaubt." } });
                     if (galleryType == GalleryType.Collection && (!string.IsNullOrWhiteSpace(collection?.SecretKey) && !string.Equals(collection?.SecretKey, request.SecretKey)))
                     {

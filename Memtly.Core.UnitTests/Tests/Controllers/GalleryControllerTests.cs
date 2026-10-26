@@ -42,12 +42,13 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
         private readonly ILogger<GalleryController> _logger = Substitute.For<ILogger<GalleryController>>();
         private readonly IStringLocalizer<Memtly.Localization.Translations> _localizer = Substitute.For<IStringLocalizer<Memtly.Localization.Translations>>();
 
-        private GalleryController CreateController(IConfiguration? configuration = null)
+        private GalleryController CreateController(IConfiguration? configuration = null, IIdentityHelper? identity = null)
         {
-            var access = new MediaAccessHelper(_database, _identity, _settings, configuration);
+            identity ??= _identity;
+            var access = new MediaAccessHelper(_database, identity, _settings, configuration);
             return new GalleryController(_settings, _database, _file, _deviceDetector, _image, _notification,
-                _encryption, _url, _identity, _logger, _localizer, access,
-                new GalleryDownloadHelper(_database, access, new MediaFileStore(), _identity, _settings));
+                _encryption, _url, identity, _logger, _localizer, access,
+                new GalleryDownloadHelper(_database, access, new MediaFileStore(), identity, _settings));
         }
         public GalleryControllerTests()
         {
@@ -704,6 +705,104 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
                 Assert.That(result, Is.TypeOf<JsonResult>());
                 Assert.That(JsonResponseHelper.GetPropertyValue(((JsonResult)result).Value, "Complete", false), Is.True);
                 await _database.Received().AddGalleryItem(Arg.Is<GalleryItemModel>(item => name != "Eure Hochzeitsfotos" || item.State == GalleryItemState.Pending));
+            }
+        }
+
+        [Test]
+        public async Task PhotographerUploadsAreAdminOnlyRegardlessOfGuestUploadSettings(
+            [Values(null, "Basic", "Paid", "Reviewer", "Moderator", "Owner", "Admin")] string? role,
+            [Values(true, false)] bool publicUploads)
+        {
+            await AssertWeddingUploadAccess("professional", role, publicUploads);
+        }
+
+        [Test]
+        public async Task OtherWeddingGalleriesKeepUploadsVisibleToEveryone(
+            [Values("guests", "private")] string destination,
+            [Values(null, "Basic", "Paid", "Reviewer", "Moderator", "Owner", "Admin")] string? role)
+        {
+            await AssertWeddingUploadAccess(destination, role, true);
+        }
+
+        private async Task AssertWeddingUploadAccess(string destination, string? role, bool publicUploads)
+        {
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Wedding:Enabled"] = "true",
+                ["Wedding:AccessCode"] = "test-code",
+                ["Wedding:ProfessionalGallery"] = "Unsere Galerie"
+            }).Build();
+            var wedding = WeddingOptions.Read(configuration);
+            var galleries = new List<GalleryModel>
+            {
+                new() { Id = 1, Identifier = "default", Name = wedding.ProfessionalGallery, Owner = 2, Type = GalleryType.Basic },
+                new() { Id = 2, Identifier = "blaa", Name = wedding.GuestGallery, Owner = 2, Type = GalleryType.Basic },
+                new() { Id = 3, Identifier = "drop_test", Name = wedding.PrivateGallery, Owner = 2, Type = GalleryType.Drop }
+            };
+            _database.GetGalleries().Returns(galleries);
+            foreach (var entry in galleries)
+            {
+                _database.GetGallery(entry.Id).Returns(entry);
+                _database.GetGalleryId(entry.Identifier).Returns(entry.Id);
+            }
+            _database.GetGalleryItems(Arg.Any<GalleryItemSearch>()).Returns(new List<GalleryItemModel>());
+            _database.GetUser(Arg.Any<int>()).Returns(new UserModel { Id = 2 });
+            _settings.GetOrDefault(MemtlyConfiguration.Basic.SingleGalleryMode, Arg.Any<bool>()).Returns(false);
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, Arg.Any<bool>(), Arg.Any<int?>()).Returns(publicUploads);
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, Arg.Any<bool>(), Arg.Any<int?>()).Returns(false);
+            // An expired/future guest upload period must not hide the admin uploader.
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.UploadPeriod, Arg.Any<string>(), 1).Returns("2999-01-01 00:00");
+            _file.FileExists(Arg.Any<string>()).Returns(true);
+
+            var identity = new IdentityHelper();
+            var controller = CreateController(configuration, identity);
+            var context = MockData.MockHttpContext();
+            if (role != null)
+                context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.Sid, role == "Owner" ? "2" : "50"),
+                    new Claim(ClaimTypes.Role, (role == "Owner" ? "Paid" : role) + "|None")
+                }, "Tests"));
+            using var services = new ServiceCollection().AddSingleton<IConfiguration>(configuration).BuildServiceProvider();
+            context.RequestServices = services;
+            controller.ControllerContext.HttpContext = context;
+            controller.TempData = Substitute.For<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataDictionary>();
+            WeddingAccessHelper.Grant(context, wedding, galleries, new MediaAccessHelper(_database, identity, _settings, configuration));
+            context.Request.Headers.Cookie = context.Response.Headers.SetCookie.Single(value => value!.StartsWith(".Memtly.Wedding.Session="))!.Split(';')[0];
+
+            var gallery = galleries[destination == "professional" ? 0 : destination == "guests" ? 1 : 2];
+            var allowed = destination != "professional" || role == "Admin";
+            var page = await controller.Index(gallery.Identifier, mode: ViewMode.Default);
+            Assert.That(page, Is.TypeOf<ViewResult>());
+            Assert.That(((PhotoGallery)((ViewResult)page).Model!).UploadActivated, Is.EqualTo(allowed));
+
+            _database.ClearReceivedCalls();
+            var upload = await controller.UploadFileChunk(new MediaUploadRequest
+            {
+                RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(),
+                CollectionId = 0, GalleryId = gallery.Id, File = Photo(), FileSize = TestPhoto.Length,
+                FileChecksum = Guid.NewGuid().ToString(), TotalChunks = 1, ChunkIndex = 0
+            });
+            var completed = await controller.UploadCompleted(new MediaBatchUploadRequest
+            {
+                RequestId = Guid.NewGuid().ToString(), CollectionId = 0, GalleryId = gallery.Id, UploadCount = 1
+            });
+            if (allowed)
+            {
+                Assert.That(upload, Is.TypeOf<JsonResult>());
+                Assert.That(JsonResponseHelper.GetPropertyValue(((JsonResult)upload).Value, "Complete", false), Is.True);
+                Assert.That(completed, Is.TypeOf<JsonResult>());
+                Assert.That(JsonResponseHelper.GetPropertyValue(((JsonResult)completed).Value, "Success", false), Is.True);
+                await _database.Received(1).AddGalleryItem(Arg.Is<GalleryItemModel>(item =>
+                    item.GalleryId == gallery.Id && item.State == (destination == "guests" ? GalleryItemState.Pending : GalleryItemState.Approved)));
+            }
+            else
+            {
+                Assert.That(upload, Is.TypeOf<ObjectResult>());
+                Assert.That(((ObjectResult)upload).StatusCode, Is.EqualTo(403));
+                Assert.That(completed, Is.TypeOf<ObjectResult>());
+                Assert.That(((ObjectResult)completed).StatusCode, Is.EqualTo(403));
+                await _database.DidNotReceive().AddGalleryItem(Arg.Any<GalleryItemModel>());
             }
         }
 
