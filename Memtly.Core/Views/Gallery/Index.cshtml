@@ -5,6 +5,7 @@
 
 @{
     var wedding = Memtly.Core.Models.WeddingOptions.Read(WeddingConfiguration);
+    ViewBag.WeddingGallery = wedding.Enabled && Model?.Gallery != null;
     var fullWidth = wedding.Enabled || await _settings.GetOrDefault(MemtlyConfiguration.Gallery.FullWidth, false, Model?.Gallery?.Id);
     var qrAppend = new List<KeyValuePair<string, string>>();
 
@@ -96,12 +97,14 @@
     </svg>
 }
 
-@if (wedding.Enabled && Model?.Gallery != null && Model.Gallery.Type != GalleryType.Drop && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, Model.Gallery.Id))
-{
-    <div class="wedding-download-bar" aria-label="Fotos herunterladen">
-        <button type="button" class="btnDownloadSelected wedding-button" data-gallery-id="@Model.Gallery.Id">Auswahl herunterladen</button>
-        <button type="button" class="btnDownloadGallery wedding-button wedding-button-outline" data-gallery-id="@Model.Gallery.Id">Alle Fotos herunterladen</button>
-    </div>
+@section WeddingHeaderActions {
+    @if (wedding.Enabled && Model?.Gallery != null && Model.Gallery.Type != GalleryType.Drop && await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Download, true, Model.Gallery.Id))
+    {
+        <div class="wedding-header-downloads" role="group" aria-label="Fotos herunterladen">
+            <button type="button" class="btnDownloadSelected wedding-button" data-gallery-id="@Model.Gallery.Id">Auswahl herunterladen</button>
+            <button type="button" class="btnDownloadGallery wedding-button wedding-button-outline" data-gallery-id="@Model.Gallery.Id">Alle Fotos herunterladen</button>
+        </div>
+    }
 }
 
 <section class="py-1 py-lg-4">

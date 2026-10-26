@@ -9,6 +9,8 @@
 @{
     var wedding = Memtly.Core.Models.WeddingOptions.Read(WeddingConfiguration);
     var weddingPublic = wedding.Enabled && !Context.Request.Path.StartsWithSegments("/Account");
+    var weddingGallery = weddingPublic && ViewBag.WeddingGallery == true;
+    if (!weddingPublic) IgnoreSection("WeddingHeaderActions");
     var galleryIdentifier = (!string.IsNullOrWhiteSpace(ViewBag?.GalleryIdentifier) && !ViewBag.GalleryIdentifier.Equals(SystemGalleries.AllGallery, StringComparison.OrdinalIgnoreCase)) ? ViewBag.GalleryIdentifier.ToLower() : "default";
     var galleryId = (_database?.GetGalleryId(galleryIdentifier)?.Result) ?? 1;
 
@@ -130,12 +132,13 @@
             <link rel="stylesheet" href="@WebpackHelper.GetAssetPath($"themes/{theme}.css")" asp-append-version="true" />
         }
     </head>
-    <body class="@(weddingPublic ? "wedding-public" : "")" data-theme="@theme" data-identity-check="@((identityCheck && !weddingPublic).ToString().ToLower())">
+    <body class="@(weddingPublic ? "wedding-public" : "") @(weddingGallery ? "wedding-gallery" : "")" data-theme="@theme" data-identity-check="@((identityCheck && !weddingPublic).ToString().ToLower())">
         @if (weddingPublic)
         {
             <nav class="wedding-nav" aria-label="Hauptnavigation">
                 <a class="wedding-brand" href="/">@wedding.Couple</a>
-                <div class="navbar-options wedding-nav-links"><a href="/#erinnerungen">Die Galerien</a><button type="button" class="wedding-nav-share" data-wedding-share>Eigene Fotos teilen <span aria-hidden="true">↗</span></button></div>
+                <div class="navbar-options wedding-nav-links"><a href="/#erinnerungen">Die Galerien</a></div>
+                @await RenderSectionAsync("WeddingHeaderActions", required: false)
             </nav>
         }
         else

@@ -114,11 +114,69 @@ test('upload card opens the existing share dialog and its cancel action closes i
     let opened = false;
     const dialog = { showModal() { opened = true; }, close() { opened = false; },
         querySelectorAll: () => [{ addEventListener: (_, action) => events.set('close', action) }] };
-    const context = vm.createContext({ document: { getElementById: id => id === 'wedding-share-dialog' ? dialog : null,
+    const context = vm.createContext({ document: { querySelector: () => null,
+        getElementById: id => id === 'wedding-share-dialog' ? dialog : null,
         querySelectorAll: () => [{ addEventListener: (_, action) => events.set('open', action) }] } });
     vm.runInContext(weddingSource + '\ninitWedding();', context);
     events.get('open')();
     assert.equal(opened, true);
     events.get('close')();
     assert.equal(opened, false);
+});
+
+test('gallery header keeps anchor offsets in sync when its download row wraps or resizes', () => {
+    const weddingSource = readFileSync(new URL('../src/modules/wedding/index.js', import.meta.url), 'utf8')
+        .replace('export default function initWedding()', 'function initWedding()');
+    let height = 68;
+    let observed;
+    let resize;
+    const offsets = [];
+    const header = { getBoundingClientRect: () => ({ height }) };
+    const context = vm.createContext({
+        document: {
+            querySelector: () => header,
+            getElementById: () => null,
+            body: { style: { setProperty: (name, value) => offsets.push([name, value]) } }
+        },
+        ResizeObserver: class {
+            constructor(callback) { resize = callback; }
+            observe(element) { observed = element; }
+        }
+    });
+    vm.runInContext(weddingSource + '\ninitWedding();', context);
+    assert.equal(observed, header);
+    height = 124;
+    resize();
+    assert.deepEqual(offsets, [['--wedding-header-height', '68px'], ['--wedding-header-height', '124px']]);
+});
+
+test('header archive actions use the current gallery selection after pagination', () => {
+    const gallerySource = readFileSync(new URL('../src/pages/gallery/gallery.js', import.meta.url), 'utf8')
+        .replace(/^import .*\r?\n/gm, '').replace(/^export /gm, '').replace('default init;', '');
+    let click;
+    let ids = [];
+    const archives = [];
+    const messages = [];
+    const document = {};
+    const bus = { off() { return this; }, on(_, selector, callback) { click = callback; return this; } };
+    const $ = element => element === document ? bus : typeof element === 'string'
+        ? { map: () => ({ get: () => ids }) } : element;
+    const context = vm.createContext({ $, document, preventDefaults() {},
+        downloadArchive: data => archives.push(JSON.parse(JSON.stringify(data))),
+        displayMessage: (...args) => messages.push(args) });
+    vm.runInContext(gallerySource + '\nbindDownloadGallery();', context);
+    const button = selected => ({ hasClass: () => selected, data: () => 42 });
+    click({ currentTarget: button(true) });
+    assert.equal(messages.length, 1);
+    assert.equal(archives.length, 0);
+    ids = ['7', '8'];
+    click({ currentTarget: button(true) });
+    ids = ['7', '8', '99'];
+    click({ currentTarget: button(true) });
+    click({ currentTarget: button(false) });
+    assert.deepEqual(archives, [
+        { Id: 42, FileFilter: ['7', '8'] },
+        { Id: 42, FileFilter: ['7', '8', '99'] },
+        { Id: 42, FileFilter: [] }
+    ]);
 });
