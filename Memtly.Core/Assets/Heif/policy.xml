@@ -4,7 +4,7 @@
   <policy domain="resource" name="disk" value="512MiB" />
   <policy domain="resource" name="width" value="16384" />
   <policy domain="resource" name="height" value="16384" />
-  <policy domain="resource" name="list-length" value="1" />
+  <policy domain="resource" name="list-length" value="4" />
   <policy domain="resource" name="thread" value="1" />
   <policy domain="resource" name="time" value="25" />
   <policy domain="delegate" rights="none" pattern="*" />

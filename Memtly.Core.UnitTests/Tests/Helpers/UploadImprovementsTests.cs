@@ -66,6 +66,18 @@ public class UploadImprovementsTests
     }
 
     [Test]
+    public void HeicContainerCannotMasqueradeAsVideo()
+    {
+        var header = new byte[] { 0, 0, 0, 20 }.Concat(System.Text.Encoding.ASCII.GetBytes("ftypheic\0\0\0\0heic")).ToArray();
+        foreach (var extension in new[] { ".mp4", ".mov" })
+        {
+            var path = Path.Combine(directory, "disguised" + extension);
+            File.WriteAllBytes(path, header);
+            Assert.That(UploadMediaValidator.IsValid(path), Is.False);
+        }
+    }
+
+    [Test]
     public async Task LinuxHeicAndHeifDecodeToBrowserPreviewAndKeepOriginal()
     {
         if (!OperatingSystem.IsLinux()) Assert.Ignore("Native HEIC decoder runs in Linux AMD64 CI and Docker.");

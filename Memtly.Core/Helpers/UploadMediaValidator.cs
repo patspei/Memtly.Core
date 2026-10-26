@@ -20,7 +20,7 @@ public static class UploadMediaValidator
                 var count = stream.Read(header);
                 if (count < 16) return false;
                 var box = Encoding.ASCII.GetString(header.Slice(4, 4));
-                if (!IsHeif(path)) return box == "ftyp" || (extension == ".mov" && box is "moov" or "mdat" or "wide");
+                if (!IsHeif(path) && extension == ".mov" && box is "moov" or "mdat" or "wide") return true;
                 if (box != "ftyp") return false;
                 var length = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header);
                 if (length < 16 || length > stream.Length) return false;
@@ -28,7 +28,11 @@ public static class UploadMediaValidator
                 {
                     if (offset == 12) continue; // Minor version, not a compatible brand.
                     var brand = Encoding.ASCII.GetString(header.Slice(offset, 4));
-                    if (brand is "heic" or "heix" or "hevc" or "hevx" || (extension == ".heif" && brand is "mif1" or "msf1")) return true;
+                    if (IsHeif(path))
+                    {
+                        if (brand is "heic" or "heix" or "hevc" or "hevx" || (extension == ".heif" && brand is "mif1" or "msf1")) return true;
+                    }
+                    else if (brand is "isom" or "iso2" or "iso3" or "iso4" or "iso5" or "iso6" or "mp41" or "mp42" or "avc1" or "dash" or "M4V " or "MSNV" or "qt  ") return true;
                 }
                 return false;
             }
