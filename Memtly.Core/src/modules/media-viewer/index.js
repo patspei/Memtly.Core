@@ -292,7 +292,7 @@ class MediaViewer {
             e.stopPropagation();
 
             const element = $(e.currentTarget).closest('.media-viewer');
-            const source = element.data('source');
+            const source = element.data('download-source');
             this.confirmSingleDownload(source);
         });
     }

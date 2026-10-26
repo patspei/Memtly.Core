@@ -7,7 +7,7 @@ public static class HeifThumbnail
 {
     private static readonly SemaphoreSlim Decoder = new(1);
 
-    public static async Task<bool> Generate(string input, string output, int size)
+    public static async Task<bool> Generate(string input, string output, int size, int quality = 80)
     {
         if (!OperatingSystem.IsLinux() || !UploadMediaValidator.IsValid(input)) return false;
         if (!await Decoder.WaitAsync(TimeSpan.FromSeconds(10))) return false;
@@ -18,7 +18,7 @@ public static class HeifThumbnail
             if (values?.Length != 2 || !int.TryParse(values[0], out var width) || !int.TryParse(values[1], out var height) ||
                 width <= 0 || height <= 0 || (long)width * height > UploadMediaValidator.MaxPixels) return false;
             var result = await Run("convert", $"{Path.GetFullPath(input)}[0]", "-auto-orient", "-thumbnail",
-                $"{Math.Clamp(size, 100, 4096)}x{Math.Clamp(size, 100, 4096)}>", "-strip", "-quality", "80", $"webp:{Path.GetFullPath(output)}");
+                $"{Math.Clamp(size, 100, 4096)}x{Math.Clamp(size, 100, 4096)}>", "-strip", "-quality", Math.Clamp(quality, 1, 100).ToString(), $"webp:{Path.GetFullPath(output)}");
             return result != null && File.Exists(output) && new FileInfo(output).Length > 0;
         }
         catch { return false; }

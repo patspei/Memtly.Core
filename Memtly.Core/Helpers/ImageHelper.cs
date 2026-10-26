@@ -16,6 +16,7 @@ namespace Memtly.Core.Helpers
     public interface IImageHelper
     {
         Task<bool> GenerateThumbnail(string filePath, string savePath, int size = 720);
+        Task<bool> GeneratePreview(string filePath, string savePath);
         MediaType GuessMediaTypeFromExtension(string path);
         MediaType GetMediaType(string filePath);
         ImageOrientation GetOrientation(string path);
@@ -40,17 +41,23 @@ namespace Memtly.Core.Helpers
         }
 
         public async Task<bool> GenerateThumbnail(string filePath, string savePath, int resolution = 720)
+            => await GenerateVariant(filePath, savePath, Math.Clamp(resolution, 100, 4096), false);
+
+        public async Task<bool> GeneratePreview(string filePath, string savePath)
+            => await GenerateVariant(filePath, savePath, 1920, true);
+
+        private async Task<bool> GenerateVariant(string filePath, string savePath, int resolution, bool preview)
         {
             if (!await ThumbnailSlots.WaitAsync(TimeSpan.FromSeconds(15))) return false;
-            try { return await GenerateThumbnailCore(filePath, savePath, Math.Clamp(resolution, 100, 4096)); }
+            try { return await GenerateThumbnailCore(filePath, savePath, resolution, preview); }
             finally { ThumbnailSlots.Release(); }
         }
 
-        private async Task<bool> GenerateThumbnailCore(string filePath, string savePath, int resolution)
+        private async Task<bool> GenerateThumbnailCore(string filePath, string savePath, int resolution, bool preview)
         {
             if (UploadMediaValidator.IsHeif(filePath))
             {
-                var success = await HeifThumbnail.Generate(filePath, savePath, resolution);
+                var success = await HeifThumbnail.Generate(filePath, savePath, resolution, preview ? 84 : 80);
                 if (!success && File.Exists(savePath)) File.Delete(savePath);
                 return success;
             }
@@ -61,6 +68,7 @@ namespace Memtly.Core.Helpers
                 try
                 {
                     mediaType = GetMediaType(filePath);
+                    if (preview && mediaType != MediaType.Image) return false;
                     if (mediaType == MediaType.Image || mediaType == MediaType.Video)
                     {
                         var filename = Path.GetFileName(filePath);
@@ -153,8 +161,13 @@ namespace Memtly.Core.Helpers
 
                         int width, height, drawWidth, drawHeight;
 
-                        var orientation = GetOrientation(filePath);
-                        if (orientation == ImageOrientation.Portrait)
+                        if (preview)
+                        {
+                            var scale = Math.Min(1d, (double)resolution / Math.Max(originWidth, originHeight));
+                            width = Math.Max(1, (int)Math.Round(originWidth * scale));
+                            height = Math.Max(1, (int)Math.Round(originHeight * scale));
+                        }
+                        else if (originHeight > originWidth)
                         {
                             var scale = (float)resolution / originHeight;
                             width = (int)Math.Round(originWidth * scale);
@@ -185,7 +198,7 @@ namespace Memtly.Core.Helpers
                         }
 
                         using var thumbnail = surface.Snapshot(new SKRectI(0, 0, width, height));
-                        using var data = thumbnail.Encode(SKEncodedImageFormat.Webp, 80);
+                        using var data = thumbnail.Encode(SKEncodedImageFormat.Webp, preview ? 84 : 80);
 
                         input.Flush();
                         input.Close();

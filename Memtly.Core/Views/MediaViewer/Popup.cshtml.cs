@@ -13,6 +13,7 @@ namespace Memtly.Core.Views.MediaViewer
         public int Id { get; set; } = 0;
         public string? Collection { get; set; }
         public string? Source { get; set; }
+        public string? Preview { get; set; }
         public string? Thumbnail { get; set; }
         public string? AuthorName { get; set; }
         public string? AuthorEmailAddress { get; set; }

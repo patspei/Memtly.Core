@@ -3,13 +3,13 @@
 
 <div id="media-viewer-wrapper" style="opacity: 0;">
     <div class="media-viewer-popup">
-        <div class="media-viewer" data-media-viewer-index="1" data-media-viewer-collection="@Model.Collection" data-type="@Model.Type.ToLower()" data-source="@Model.Source">
+        <div class="media-viewer" data-media-viewer-index="1" data-media-viewer-collection="@Model.Collection" data-type="@Model.Type.ToLower()" data-source="@(Model.Preview ?? Model.Source)" data-download-source="@Model.Source">
             @if (!string.IsNullOrWhiteSpace(Model.Title))
             {
                 <div class="media-viewer-title">@Model.Title</div>
             }
             <div class="media-viewer-row media-viewer-content">
-                <img class="media-viewer-image" src="@(Model.Type.Equals("Image", StringComparison.OrdinalIgnoreCase) ? Model.Source : Model.Thumbnail)" onerror="this.onerror=null; this.src='/_content/Memtly.Core/images/@(Model.Type.Equals("Image", StringComparison.OrdinalIgnoreCase) ? "BrokenImage.webp" : "BrokenVideo.webp")';" />
+                <img class="media-viewer-image" src="@(Model.Type.Equals("Image", StringComparison.OrdinalIgnoreCase) ? Model.Preview ?? Model.Source : Model.Thumbnail)" onerror="this.onerror=null; this.src='/_content/Memtly.Core/images/@(Model.Type.Equals("Image", StringComparison.OrdinalIgnoreCase) ? "BrokenImage.webp" : "BrokenVideo.webp")';" />
                 <div class="media-viewer-actions row">
                     <div class="col-6">
                         @if (Model.Likes != null && Model.Likes.Enabled)

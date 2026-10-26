@@ -87,6 +87,11 @@ public class MediaSecurityTests
             await File.WriteAllTextAsync(call.ArgAt<string>(1), "THUMB-" + await File.ReadAllTextAsync(call.ArgAt<string>(0)));
             return true;
         });
+        images.GeneratePreview(Arg.Any<string>(), Arg.Any<string>()).Returns(async call =>
+        {
+            await File.WriteAllTextAsync(call.ArgAt<string>(1), "PREVIEW-" + await File.ReadAllTextAsync(call.ArgAt<string>(0)));
+            return true;
+        });
 
         host = WebHost.CreateDefaultBuilder()
             .ConfigureAppConfiguration(builder => builder.AddInMemoryCollection(new Dictionary<string, string?> { ["Wedding:Enabled"] = "true" }))
@@ -300,6 +305,7 @@ public class MediaSecurityTests
         Assert.That((await Download(client, 3)).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
         Assert.That((await client.GetAsync("/Media/Original/4")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         Assert.That((await client.GetAsync("/Media/Thumbnail/4")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That((await client.GetAsync("/Media/Preview/4")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         Assert.That((await client.GetAsync("/MediaViewer/GalleryItem?id=4")).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
@@ -373,10 +379,12 @@ public class MediaSecurityTests
     {
         using var guest = Client();
         Assert.That((await guest.GetAsync("/Media/Original/1")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await guest.GetAsync("/Media/Preview/1")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         try
         {
             galleries[1].Type = GalleryType.Drop;
             Assert.That((await guest.GetAsync("/Media/Original/1")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+            Assert.That((await guest.GetAsync("/Media/Preview/1")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         }
         finally { galleries[1].Type = GalleryType.Basic; }
     }
@@ -403,11 +411,13 @@ public class MediaSecurityTests
 
     [TestCase(2)]
     [TestCase(3)]
+    [TestCase(4)]
+    [TestCase(5)]
     [TestCase(7)]
     public async Task DirectPreviewOriginalHeadAndRangeNeverExposeNonApprovedMedia(int id)
     {
         using var client = Client();
-        foreach (var path in new[] { $"/Media/Original/{id}", $"/Media/Thumbnail/{id}" })
+        foreach (var path in new[] { $"/Media/Original/{id}", $"/Media/Thumbnail/{id}", $"/Media/Preview/{id}" })
         {
             var response = await client.GetAsync(path);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
@@ -441,12 +451,15 @@ public class MediaSecurityTests
     {
         using var client = Client();
         Assert.That((await client.GetAsync("/Media/Original/5")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That((await client.GetAsync("/Media/Preview/5")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         await client.GetAsync("/grant/2?key=child-key");
         Assert.That(await client.GetStringAsync("/Media/Original/5"), Is.EqualTo("PRIVATE-KEY"));
+        Assert.That(await client.GetStringAsync("/Media/Preview/5"), Is.EqualTo("PREVIEW-PRIVATE-KEY"));
         try
         {
             galleries[2].SecretKey = "rotated-key";
             Assert.That((await client.GetAsync("/Media/Original/5")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+            Assert.That((await client.GetAsync("/Media/Preview/5")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
         }
         finally { galleries[2].SecretKey = "child-key"; }
     }
@@ -459,6 +472,7 @@ public class MediaSecurityTests
     [TestCase("/temp/Export/Uploads.bak")]
     [TestCase("/_content/Memtly.Core/uploads/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/pending.jpg")]
     [TestCase("/_content/Memtly.Core/thumbnails/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/pending.webp")]
+    [TestCase("/thumbnails/Secure/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/preview.webp")]
     public async Task LegacyStaticUrlsAreBlockedBeforeStaticFiles(string path)
     {
         using var client = Client();
@@ -491,6 +505,53 @@ public class MediaSecurityTests
         var temp = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(context, scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider>());
         await result.View.RenderAsync(new Microsoft.AspNetCore.Mvc.Rendering.ViewContext(action, result.View, data, temp, writer, new Microsoft.AspNetCore.Mvc.ViewFeatures.HtmlHelperOptions()));
         return writer.ToString();
+    }
+
+    [TestCase(1, HttpStatusCode.OK)]
+    [TestCase(2, HttpStatusCode.NotFound)]
+    [TestCase(3, HttpStatusCode.NotFound)]
+    [TestCase(4, HttpStatusCode.NotFound)]
+    [TestCase(5, HttpStatusCode.NotFound)]
+    public async Task WarmPreviewCacheStillRequiresAuthorizationOnEveryRequest(int id, HttpStatusCode guestStatus)
+    {
+        using var admin = Client("1:Admin");
+        var authorized = await admin.GetAsync($"/Media/Preview/{id}");
+        Assert.That(authorized.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(authorized.Content.Headers.ContentType?.MediaType, Is.EqualTo("image/webp"));
+        Assert.That(authorized.Headers.CacheControl?.Private, Is.True);
+        Assert.That(authorized.Headers.CacheControl?.NoStore, Is.True);
+        Assert.That(authorized.Headers.Vary, Does.Contain("Cookie"));
+        Assert.That(authorized.Headers.GetValues("X-Content-Type-Options"), Does.Contain("nosniff"));
+        Assert.That(await admin.GetStringAsync($"/Media/Original/{id}?download=true"),
+            Is.Not.EqualTo(await authorized.Content.ReadAsStringAsync()));
+
+        using var guest = Client();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/Media/Preview/{id}");
+        if (authorized.Headers.ETag != null) request.Headers.IfNoneMatch.Add(authorized.Headers.ETag);
+        var response = await guest.SendAsync(request);
+        Assert.That(response.StatusCode, guestStatus == HttpStatusCode.OK
+            ? Is.AnyOf(HttpStatusCode.OK, HttpStatusCode.NotModified) : Is.EqualTo(guestStatus));
+        Assert.That(response.Headers.CacheControl?.NoStore, Is.True);
+    }
+
+    [TestCase(MediaType.Image)]
+    [TestCase(MediaType.Video)]
+    public async Task LightboxUsesImagePreviewButKeepsOriginalVideoAndDownload(MediaType type)
+    {
+        var item = items.Single(i => i.Id == 1);
+        try
+        {
+            item.MediaType = type;
+            using var client = Client();
+            var html = await client.GetStringAsync("/MediaViewer/GalleryItem?id=1");
+            Assert.That(html, Does.Contain($"data-source=\"/Media/{(type == MediaType.Image ? "Preview" : "Original")}/1\""));
+            Assert.That(html, Does.Contain("data-download-source=\"/Media/Original/1\""));
+            if (type == MediaType.Image)
+                Assert.That(html, Does.Contain("src=\"/Media/Preview/1\""));
+            else
+                Assert.That((await client.GetAsync("/Media/Preview/1")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        }
+        finally { item.MediaType = MediaType.Image; }
     }
 
     [TestCase(null, null)]

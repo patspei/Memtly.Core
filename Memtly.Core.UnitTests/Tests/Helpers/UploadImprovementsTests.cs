@@ -3,6 +3,8 @@ using Memtly.Core.Helpers;
 using Memtly.Core.Models;
 using Memtly.Core.UnitTests.Helpers;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
 namespace Memtly.Core.UnitTests.Tests.Helpers;
@@ -77,16 +79,21 @@ public class UploadImprovementsTests
         }
     }
 
-    [Test]
-    public async Task LinuxHeicAndHeifDecodeToBrowserPreviewAndKeepOriginal()
+    [TestCase(80, 120, 80, 120)]
+    [TestCase(1200, 2400, 960, 1920)]
+    public async Task LinuxHeicAndHeifDecodeToBrowserPreviewAndKeepOriginal(int width, int height, int previewWidth, int previewHeight)
     {
         if (!OperatingSystem.IsLinux()) Assert.Ignore("Native HEIC decoder runs in Linux AMD64 CI and Docker.");
         var original = Path.Combine(directory, "photo.heic");
         // Encode the fixture before applying the production decoder-only security policy.
-        using var process = Process.Start(new ProcessStartInfo("convert") { ArgumentList = { "-size", "80x120", "xc:green", original }, UseShellExecute = false });
+        using var process = Process.Start(new ProcessStartInfo("convert") { ArgumentList = { "-size", $"{width}x{height}", "xc:green", original }, UseShellExecute = false });
         await process!.WaitForExitAsync();
         Assert.That(process.ExitCode, Is.Zero);
         var bytes = File.ReadAllBytes(original);
+        var files = Substitute.For<IFileHelper>();
+        files.FileExists(Arg.Any<string>()).Returns(call => File.Exists(call.Arg<string>()));
+        var images = new ImageHelper(files, Substitute.For<ILogger<ImageHelper>>(),
+            Substitute.For<IStringLocalizer<Localization.Translations>>());
         foreach (var extension in new[] { ".heic", ".heif" })
         {
             var path = Path.Combine(directory, "input" + extension);
@@ -97,6 +104,12 @@ public class UploadImprovementsTests
             Assert.That(UploadMediaValidator.IsValid(preview), Is.True);
             using var codec = SKCodec.Create(preview);
             Assert.That(codec.Info.Width, Is.LessThan(codec.Info.Height));
+            var screenPreview = path + ".preview.webp";
+            Assert.That(await images.GeneratePreview(path, screenPreview), Is.True);
+            using var previewCodec = SKCodec.Create(screenPreview);
+            Assert.That(previewCodec.EncodedFormat, Is.EqualTo(SKEncodedImageFormat.Webp));
+            Assert.That(previewCodec.Info.Width, Is.EqualTo(previewWidth));
+            Assert.That(previewCodec.Info.Height, Is.EqualTo(previewHeight));
             Assert.That(File.ReadAllBytes(path), Is.EqualTo(bytes));
         }
         File.WriteAllBytes(original, bytes.Take(30).ToArray());

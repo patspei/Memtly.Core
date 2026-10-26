@@ -101,7 +101,9 @@ test('checkbox interaction remains separate from image and download actions', ()
 
 test('desktop lightbox downloads share the same confirmation and original download', () => {
     const { handlers, requests, confirmations, downloads } = setup();
-    handlers.get('click:.media-viewer-download')(event({ closest: () => ({ data: () => '/Media/Original/9' }) }));
+    handlers.get('click:.media-viewer-download')(event({ closest: () => ({
+        data: name => name === 'download-source' ? '/Media/Original/9' : '/Media/Preview/9'
+    }) }));
     assert.deepEqual(requests, ['/Media/DownloadInfo/9']);
     confirmations[0].proceed();
     assert.deepEqual(downloads, ['/Media/Original/9?download=true']);

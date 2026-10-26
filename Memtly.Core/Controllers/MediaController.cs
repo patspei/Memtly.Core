@@ -29,6 +29,18 @@ public sealed class MediaController(IDatabaseHelper database, IMediaAccessHelper
     [HttpHead("/Media/Thumbnail/{id:int}")]
     public async Task<IActionResult> Thumbnail([FromRoute] int id) => await Serve(id, true, false);
 
+    [HttpGet("/Media/Preview/{id:int}")]
+    [HttpHead("/Media/Preview/{id:int}")]
+    public async Task<IActionResult> Preview([FromRoute] int id)
+    {
+        NoCache();
+        var item = await database.GetGalleryItem(id);
+        if (item == null || !await access.CanRead(HttpContext, item) || item.MediaType != MediaType.Image) return NotFound();
+        var gallery = await database.GetGallery(item.GalleryId);
+        var path = gallery == null ? null : await thumbnails.GetPreviewPath(gallery, item);
+        return path == null ? NotFound() : PhysicalFile(path, "image/webp", enableRangeProcessing: true);
+    }
+
     private async Task<IActionResult> Serve(int id, bool thumbnail, bool download)
     {
         NoCache();
