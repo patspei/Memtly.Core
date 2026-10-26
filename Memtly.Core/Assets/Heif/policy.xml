@@ -11,6 +11,6 @@
   <policy domain="filter" rights="none" pattern="*" />
   <policy domain="path" rights="none" pattern="@*" />
   <policy domain="coder" rights="none" pattern="*" />
-  <policy domain="coder" rights="read" pattern="HEIC" />
+  <policy domain="coder" rights="read" pattern="{HEIC,HEIF}" />
   <policy domain="coder" rights="write" pattern="WEBP" />
 </policymap>

@@ -93,7 +93,7 @@ public class UploadImprovementsTests
             File.Copy(original, path);
             Assert.That(UploadMediaValidator.IsValid(path), Is.True);
             var preview = path + ".webp";
-            Assert.That(await HeifThumbnail.Generate(path, preview, 720), Is.True);
+            Assert.That(await HeifThumbnail.Generate(path, preview, 720), Is.True, $"Native preview for {extension}");
             Assert.That(UploadMediaValidator.IsValid(preview), Is.True);
             using var codec = SKCodec.Create(preview);
             Assert.That(codec.Info.Width, Is.LessThan(codec.Info.Height));
