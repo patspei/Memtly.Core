@@ -41,6 +41,16 @@ namespace Memtly.Core.Attributes
                         var gallery = databaseHelper?.GetGallery(galleryId.Value).Result;
                         if (gallery != null)
                         { 
+                            var wedding = Models.WeddingOptions.Read(filterContext.HttpContext.RequestServices.GetService<IConfiguration>());
+                            if (wedding.IsWedding(gallery))
+                            {
+                                var access = filterContext.HttpContext.RequestServices.GetRequiredService<IMediaAccessHelper>();
+                                if (!access.CanAccessGallery(filterContext.HttpContext, gallery).GetAwaiter().GetResult())
+                                    filterContext.Result = new RedirectToActionResult("Login", "Wedding", new { returnUrl = $"/Gallery?identifier={Uri.EscapeDataString(gallery.Identifier)}" });
+                                else if (request.Query.ContainsKey("key") || request.Query.ContainsKey("enc"))
+                                    filterContext.Result = new RedirectResult($"/Gallery?identifier={Uri.EscapeDataString(gallery.Identifier)}");
+                                return;
+                            }
                             var encryptionHelper = filterContext.HttpContext.RequestServices.GetService<IEncryptionHelper>();
                             if (encryptionHelper != null)
                             {

@@ -6,6 +6,7 @@ namespace Memtly.Core.Models;
 public sealed class WeddingOptions
 {
     public bool Enabled { get; set; }
+    public string? AccessCode { get; set; }
     public string Couple { get; set; } = "Julia & Patrick";
     public string HeroImage { get; set; } = "/_content/Memtly.Core/images/DemoImage.png";
     public string? GalleryCardImage { get; set; }

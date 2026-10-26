@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Memtly.Core.Constants;
 using Memtly.Core.Enums;
 using Memtly.Core.Helpers;
@@ -138,7 +138,7 @@ namespace Memtly.Core.BackgroundWorkers
                                                 _fileHelper.MoveDirectoryIfExists(galleryDir, galleryPath);
                                             }
 
-                                            var allowedFileTypes = _settingsHelper.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", galleryItem?.Id).Result.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                                            var allowedFileTypes = _settingsHelper.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov", galleryItem?.Id).Result.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                                             var galleryItems = await db.GetGalleryItems(new GalleryItemSearch()
                                             {
                                                 GalleryIds = new List<int>() { galleryItem!.Id },

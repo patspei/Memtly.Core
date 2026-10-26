@@ -20,6 +20,16 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
 {
     public class GalleryControllerTests
     {
+        private readonly List<string> uploadPaths = [];
+        private static readonly byte[] TestPhoto = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jr1sAAAAASUVORK5CYII=");
+        private static IFormFile Photo(string filename = "photo.png") => new FormFile(new MemoryStream(TestPhoto), 0, TestPhoto.Length, "File", filename);
+
+        [TearDown]
+        public void CleanUploads()
+        {
+            foreach (var path in uploadPaths) if (File.Exists(path)) File.Delete(path);
+            uploadPaths.Clear();
+        }
         private readonly ISettingsHelper _settings = Substitute.For<ISettingsHelper>();
         private readonly IDatabaseHelper _database = Substitute.For<IDatabaseHelper>();
         private readonly IFileHelper _file = Substitute.For<IFileHelper>();
@@ -32,9 +42,9 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
         private readonly ILogger<GalleryController> _logger = Substitute.For<ILogger<GalleryController>>();
         private readonly IStringLocalizer<Memtly.Localization.Translations> _localizer = Substitute.For<IStringLocalizer<Memtly.Localization.Translations>>();
 
-        private GalleryController CreateController()
+        private GalleryController CreateController(IConfiguration? configuration = null)
         {
-            var access = new MediaAccessHelper(_database, _identity, _settings);
+            var access = new MediaAccessHelper(_database, _identity, _settings, configuration);
             return new GalleryController(_settings, _database, _file, _deviceDetector, _image, _notification,
                 _encryption, _url, _identity, _logger, _localizer, access,
                 new GalleryDownloadHelper(_database, access, new MediaFileStore(), _identity, _settings));
@@ -46,6 +56,18 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
         [SetUp]
         public void Setup()
         {
+            _file.SanitizeFilename(Arg.Any<string>()).Returns(call => Path.GetFileName(call.Arg<string>()));
+            _file.CreateDirectoryIfNotExists(Arg.Any<string>()).Returns(call => { Directory.CreateDirectory(call.Arg<string>()); return true; });
+            _file.SaveFile(Arg.Any<IFormFile>(), Arg.Any<string>(), Arg.Any<FileMode>()).Returns(async call =>
+            {
+                var path = call.ArgAt<string>(1);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                uploadPaths.Add(path);
+                await using var output = File.Create(path);
+                await call.ArgAt<IFormFile>(0).CopyToAsync(output);
+            });
+            _file.DeleteFileIfExists(Arg.Any<string>()).Returns(call => { if (File.Exists(call.Arg<string>())) File.Delete(call.Arg<string>()); return true; });
+            _image.GenerateThumbnail(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>()).Returns(true);
             var mockData = GetMockGalleryData();
             // Collections contain actual child galleries, never items owned by
             // the collection itself. Use an explicitly public child fixture.
@@ -131,7 +153,7 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             _settings.GetOrDefault(MemtlyConfiguration.Gallery.UploadPeriod, Arg.Any<string>(), Arg.Any<int>()).Returns("1970-01-01 00:00:00");
             _settings.GetOrDefault(MemtlyConfiguration.Gallery.PreventDuplicates, Arg.Any<bool>(), Arg.Any<int>()).Returns(true);
             _settings.GetOrDefault(MemtlyConfiguration.Gallery.DefaultView, Arg.Any<int>(), Arg.Any<int>()).Returns((int)ViewMode.Default);
-            _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, Arg.Any<string>(), Arg.Any<int>()).Returns(".jpg,.jpeg,.png,.mp4,.mov");
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, Arg.Any<string>(), Arg.Any<int>()).Returns(".jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov");
             _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, Arg.Any<bool>(), Arg.Any<int>()).Returns(true);
             _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxSizeMB, Arg.Any<long>(), Arg.Any<int>()).Returns(1024);
             _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxFileSizeMB, Arg.Any<long>(), Arg.Any<int>()).Returns(10);
@@ -635,8 +657,8 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
                 CollectionId = 0,
                 GalleryId = 1,
                 SecretKey = "password",
-                File = new FormFile(null, 0, 0, "TestFile_001", $"{Guid.NewGuid()}.jpg"),
-                FileSize = 10,
+                File = Photo(),
+                FileSize = TestPhoto.Length,
                 FileChecksum = Guid.NewGuid().ToString(),
                 ChunkIndex = 0,
                 TotalChunks = 1
@@ -670,7 +692,7 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Wedding:Enabled"] = "true" }).Build();
             using var services = new ServiceCollection().AddSingleton<IConfiguration>(configuration).BuildServiceProvider();
             controller.HttpContext.RequestServices = services;
-            var result = await controller.UploadFileChunk(new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(), CollectionId = 0, ChunkIndex = 0, GalleryId = 1, File = new FormFile(Stream.Null, 0, 10, "File", "photo.jpg"), FileSize = 10, FileChecksum = Guid.NewGuid().ToString(), TotalChunks = 1 });
+            var result = await controller.UploadFileChunk(new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(), CollectionId = 0, ChunkIndex = 0, GalleryId = 1, File = Photo(), FileSize = TestPhoto.Length, FileChecksum = Guid.NewGuid().ToString(), TotalChunks = 1 });
             if (!allowed)
             {
                 Assert.That(result, Is.TypeOf<ObjectResult>());
@@ -689,11 +711,59 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
         [TestCase("photo.HEIF")]
         public async Task HeicUploadReturnsActionableError(string filename)
         {
+            _database.ClearReceivedCalls();
             var controller = CreateController();
             controller.ControllerContext.HttpContext = MockData.MockHttpContext();
-            var result = (JsonResult)await controller.UploadFileChunk(new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(), CollectionId = 0, ChunkIndex = 0, GalleryId = 1, SecretKey = "password", FileSize = 10, FileChecksum = "test", File = new FormFile(Stream.Null, 0, 10, "File", filename), TotalChunks = 1 });
+            var result = (JsonResult)await controller.UploadFileChunk(new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(), CollectionId = 0, ChunkIndex = 0, GalleryId = 1, SecretKey = "password", FileSize = TestPhoto.Length, FileChecksum = "test", File = Photo(filename), TotalChunks = 1 });
             Assert.That(JsonResponseHelper.GetPropertyValue(result.Value, "Success", true), Is.False);
             Assert.That(string.Join(" ", JsonResponseHelper.GetPropertyValue(result.Value, "Errors", new List<string>())), Does.Contain("JPEG"));
+            await _database.DidNotReceive().AddGalleryItem(Arg.Any<GalleryItemModel>());
+        }
+
+        [Test]
+        public async Task CentralWeddingGrantAllowsChunkedPrivateUploadWithFrozenNameButNeverReading()
+        {
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Wedding:Enabled"] = "true" }).Build();
+            var options = WeddingOptions.Read(configuration);
+            var galleries = new List<GalleryModel> {
+                new() { Id = 11, Name = options.ProfessionalGallery, SecretKey = "shared" },
+                new() { Id = 12, Name = options.GuestGallery, SecretKey = "shared" },
+                new() { Id = 13, Name = options.PrivateGallery, SecretKey = "shared", Type = GalleryType.Drop, Owner = 2 }
+            };
+            _database.GetGalleries().Returns(galleries);
+            _database.GetGallery(13).Returns(galleries[2]);
+            _database.GetUser(2).Returns(new UserModel());
+            _identity.GetUserId(Arg.Any<ClaimsPrincipal>()).Returns(-1);
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.Upload, Arg.Any<bool>(), Arg.Any<int?>()).Returns(true);
+            _file.FileExists(Arg.Any<string>()).Returns(true);
+            _file.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>()).Returns(call => Directory.GetFiles(call.ArgAt<string>(0), call.ArgAt<string>(1), call.ArgAt<SearchOption>(2)));
+            _database.ClearReceivedCalls();
+            var controller = CreateController(configuration);
+            controller.ControllerContext.HttpContext = MockData.MockHttpContext();
+            using var services = new ServiceCollection().AddSingleton<IConfiguration>(configuration).BuildServiceProvider();
+            controller.HttpContext.RequestServices = services;
+            var access = new MediaAccessHelper(_database, _identity, _settings, configuration);
+            WeddingAccessHelper.Grant(controller.HttpContext, options, galleries, access);
+            controller.Request.Headers.Cookie = controller.Response.Headers.SetCookie.Single(value => value!.StartsWith(".Memtly.Wedding.Session="))!.Split(';')[0];
+            controller.HttpContext.Session.SetString(SessionKey.Viewer.Identity, "First & name");
+            var request = new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(),
+                GalleryId = 13, CollectionId = 0, FileSize = TestPhoto.Length, FileChecksum = Guid.NewGuid().ToString(), TotalChunks = 2, ChunkIndex = 0,
+                File = new FormFile(new MemoryStream(TestPhoto.Take(30).ToArray()), 0, 30, "File", "photo.png") };
+            var first = (JsonResult)await controller.UploadFileChunk(request);
+            Assert.That(JsonResponseHelper.GetPropertyValue(first.Value, "Success", false), Is.True);
+            Assert.That(JsonResponseHelper.GetPropertyValue(first.Value, "Complete", true), Is.False);
+            controller.HttpContext.Session.SetString(SessionKey.Viewer.Identity, "Changed name");
+            request.ChunkIndex = 1;
+            request.File = new FormFile(new MemoryStream(TestPhoto.Skip(30).ToArray()), 0, TestPhoto.Length - 30, "File", "photo.png");
+            var second = (JsonResult)await controller.UploadFileChunk(request);
+            Assert.That(JsonResponseHelper.GetPropertyValue(second.Value, "Complete", false), Is.True,
+                System.Text.Json.JsonSerializer.Serialize(second.Value) + " " + string.Join("\n", _logger.ReceivedCalls().Select(call => string.Join(" ", call.GetArguments().Select(arg => arg?.ToString())))));
+            await _database.Received(1).AddGalleryItem(Arg.Is<GalleryItemModel>(item => item.GalleryId == 13 && item.UploadedBy == "First & name"));
+            Assert.That(await access.CanRead(controller.HttpContext, new GalleryItemModel { GalleryId = 13, State = GalleryItemState.Approved }), Is.False);
+            var saved = _database.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "AddGalleryItem").GetArguments()[0] as GalleryItemModel;
+            var root = Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly()!.Location)!;
+            uploadPaths.Add(Path.Combine(root, "uploads", galleries[2].Identifier, "Pending", saved!.Title));
+            uploadPaths.Add(Path.Combine(root, "uploads", galleries[2].Identifier, saved.Title));
         }
 
         [TestCase]

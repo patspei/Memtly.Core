@@ -30,6 +30,7 @@ namespace Memtly.Core.Helpers
         private readonly IStringLocalizer<Localization.Translations> _localizer;
 
         private static bool FfmpegInstalled = false;
+        private static readonly SemaphoreSlim ThumbnailSlots = new(1);
 
         public ImageHelper(IFileHelper fileHelper, ILogger<ImageHelper> logger, IStringLocalizer<Localization.Translations> localizer)
         {
@@ -40,6 +41,19 @@ namespace Memtly.Core.Helpers
 
         public async Task<bool> GenerateThumbnail(string filePath, string savePath, int resolution = 720)
         {
+            if (!await ThumbnailSlots.WaitAsync(TimeSpan.FromSeconds(15))) return false;
+            try { return await GenerateThumbnailCore(filePath, savePath, Math.Clamp(resolution, 100, 4096)); }
+            finally { ThumbnailSlots.Release(); }
+        }
+
+        private async Task<bool> GenerateThumbnailCore(string filePath, string savePath, int resolution)
+        {
+            if (UploadMediaValidator.IsHeif(filePath))
+            {
+                var success = await HeifThumbnail.Generate(filePath, savePath, resolution);
+                if (!success && File.Exists(savePath)) File.Delete(savePath);
+                return success;
+            }
             if (_fileHelper.FileExists(filePath))
             {
                 var mediaType = MediaType.Unknown;
@@ -75,6 +89,8 @@ namespace Memtly.Core.Helpers
 
                         using var input = File.OpenRead(filePath);
                         using var codec = SKCodec.Create(input, out var result) ?? throw new InvalidOperationException("Unsupported or invalid image.");
+                        if (codec.Info.Width <= 0 || codec.Info.Height <= 0 || (long)codec.Info.Width * codec.Info.Height > UploadMediaValidator.MaxPixels)
+                            throw new InvalidDataException("Image exceeds the pixel limit.");
 
                         using var rawBitmap = new SKBitmap(codec.Info);
                         var decodeResult = codec.GetPixels(codec.Info, rawBitmap.GetPixels());
@@ -184,7 +200,7 @@ namespace Memtly.Core.Helpers
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, $"Failed to generate thumbnail - '{filePath}'");
-                    File.Copy(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, Directories.Private.Assets, $"{(mediaType == MediaType.Video ? "BrokenVideo" : "BrokenImage")}.webp"), savePath, true);
+                    if (File.Exists(savePath)) File.Delete(savePath);
                 }
             }
 
@@ -215,6 +231,7 @@ namespace Memtly.Core.Helpers
 
         public MediaType GetMediaType(string path)
         {
+            if (UploadMediaValidator.IsHeif(path) || Path.GetExtension(path).Equals(".webp", StringComparison.OrdinalIgnoreCase)) return MediaType.Image;
             try
             {
                 var provider = new FileExtensionContentTypeProvider();

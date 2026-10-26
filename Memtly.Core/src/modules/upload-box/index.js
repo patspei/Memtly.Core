@@ -4,6 +4,7 @@ import { displayLoader, hideLoader } from '@modules/loader';
 import { displayIdentityCheck } from '@modules/identity-check';
 import { refreshGalleryPage } from '@pages/gallery/gallery';
 import { getFileChecksum } from '@utilities/files';
+import { ensureWeddingIdentity } from '@modules/wedding/uploader-identity';
 
 class UploadBox {
     constructor() {
@@ -17,6 +18,7 @@ class UploadBox {
     }
 
     isIdentityRequired() {
+        if ($('form.file-uploader-form').attr('data-wedding-upload') === 'true') return false;
         return $('form.file-uploader-form').attr('data-identity-required') === 'true';
     }
 
@@ -237,7 +239,7 @@ class UploadBox {
     }
 
     isImageFile(file) {
-        return file.type.toLowerCase().startsWith('image/');
+        return file.type.toLowerCase().startsWith('image/') || /\.(heic|heif|webp)$/i.test(file.name);
     }
 
     isVideoFile(file) {
@@ -247,12 +249,6 @@ class UploadBox {
     async handleFiles(dataRefs) {
         let files = [...dataRefs.files];
 
-        const unsupported = files.filter(file => /\.(heic|heif)$/i.test(file.name));
-        if (unsupported.length) {
-            displayMessage('Fotos hochladen', 'HEIC/HEIF wird nicht unterstützt. Bitte exportiert diese Fotos als JPEG. Auf dem iPhone: Einstellungen → Kamera → Formate → Maximale Kompatibilität. Wählt danach eure Fotos erneut aus.');
-            dataRefs.input.value = '';
-            return;
-        }
         // Remove unaccepted file types
         files = files.filter(item => {
             const isAllowed = this.isImageFile(item) || this.isVideoFile(item);
@@ -263,11 +259,12 @@ class UploadBox {
         });
 
         if (!files.length) {
-            displayMessage('Fotos hochladen', 'Bitte wählt unterstützte Fotos (JPEG, PNG) oder Videos aus.');
+            displayMessage('Fotos hochladen', 'Bitte wählt unterstützte Fotos (JPEG, PNG, HEIC, HEIF, WebP) oder Videos aus.');
             return;
         }
 
         dataRefs.files = files;
+        if (!await ensureWeddingIdentity(dataRefs.input.closest('form'))) return;
         await this.imageUpload(dataRefs);
     }
 

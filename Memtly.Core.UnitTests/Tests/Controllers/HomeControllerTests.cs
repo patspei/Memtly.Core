@@ -10,6 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Memtly.Core.UnitTests.Tests.Helpers
 {
@@ -30,6 +33,25 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
         [SetUp]
         public void Setup()
         {
+        }
+
+        [TestCase("  Guest & friend  ", true, true, "Guest & friend")]
+        [TestCase("", true, true, "Anonymous")]
+        [TestCase("<img src=x onerror=alert(1)>", true, false, null)]
+        [TestCase("Guest", false, false, null)]
+        public async Task WeddingIdentityIsOptionalValidatedAndNeverRequiresEmail(string name, bool csrfValid, bool allowed, string? expected)
+        {
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Wedding:Enabled"] = "true" }).Build();
+            var antiforgery = Substitute.For<IAntiforgery>();
+            antiforgery.IsRequestValidAsync(Arg.Any<HttpContext>()).Returns(csrfValid);
+            using var services = new ServiceCollection().AddSingleton<IConfiguration>(configuration).AddSingleton(antiforgery).BuildServiceProvider();
+            _settings.GetOrDefault(MemtlyConfiguration.IdentityCheck.RequireEmail, Arg.Any<bool>()).Returns(true);
+            var controller = new HomeController(_settings, _database, _deviceDetector, _audit, _identity, _logger, _localizer)
+                { ControllerContext = new() { HttpContext = new DefaultHttpContext { Session = new MockSession(), RequestServices = services } } };
+            var result = await controller.SetIdentity(name, null, weddingUpload: true);
+            Assert.That(result, allowed ? Is.TypeOf<JsonResult>() : Is.TypeOf<BadRequestObjectResult>());
+            Assert.That(controller.HttpContext.Session.GetString(SessionKey.Viewer.Identity), Is.EqualTo(expected));
+            if (allowed) Assert.That(controller.HttpContext.Session.GetString(SessionKey.Viewer.EmailAddress), Is.Empty);
         }
 
         [TestCase(DeviceType.Desktop, true, "", true)]

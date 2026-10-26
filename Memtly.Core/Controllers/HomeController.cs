@@ -37,7 +37,12 @@ namespace Memtly.Core.Controllers
         public async Task<IActionResult> Index()
         {
             var wedding = Models.WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
-            if (wedding.Enabled) return View("Wedding", wedding);
+            if (wedding.Enabled)
+            {
+                if (!WeddingAccessHelper.IsGranted(HttpContext, wedding, await WeddingAccessHelper.Resolve(_database, wedding)))
+                    return RedirectToAction("Login", "Wedding");
+                return View("Wedding", wedding);
+            }
             var model = new Views.Home.IndexModel();
 
             try
@@ -95,10 +100,21 @@ namespace Memtly.Core.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> SetIdentity(string name, string? email)
+        public async Task<IActionResult> SetIdentity(string? name, string? email, bool weddingUpload = false)
         {
             try
             {
+                if (weddingUpload && Models.WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>()).Enabled)
+                {
+                    var antiforgery = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
+                    if (!await antiforgery.IsRequestValidAsync(HttpContext)) return BadRequest(new { success = false });
+                    if (!UploaderIdentity.TryNormalize(name, out var normalized))
+                        return BadRequest(new { success = false, reason = 1 });
+                    HttpContext.Session.SetString(SessionKey.Viewer.Identity, normalized);
+                    HttpContext.Session.SetString(SessionKey.Viewer.EmailAddress, string.Empty);
+                    HttpContext.Session.SetString("Memtly.Wedding.Identity", "true");
+                    return Json(new { success = true });
+                }
                 var emailRequired = await _settings.GetOrDefault(MemtlyConfiguration.IdentityCheck.RequireEmail, false);
 
                 if (string.IsNullOrWhiteSpace(name) || HtmlSanitizer.MayContainXss(name))
@@ -121,7 +137,7 @@ namespace Memtly.Core.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"{_localizer["Identity_Session_Error"].Value}: '{name}'");
+                _logger.LogError(ex, "Failed to set viewer identity");
             }
 
             return Json(new { success = false });

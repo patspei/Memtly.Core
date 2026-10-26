@@ -36,7 +36,8 @@ public sealed class MediaController(IDatabaseHelper database, IMediaAccessHelper
         if (item == null || !await access.CanRead(HttpContext, item) ||
             (download && !await access.CanDownload(HttpContext, item))) return NotFound();
         var gallery = await database.GetGallery(item.GalleryId);
-        var path = gallery == null ? null : thumbnail ? await thumbnails.GetPath(gallery, item) : files.GetPath(gallery, item);
+        var browserPreview = !download && UploadMediaValidator.IsHeif(item.Title);
+        var path = gallery == null ? null : thumbnail || browserPreview ? await thumbnails.GetPath(gallery, item) : files.GetPath(gallery, item);
         if (path == null) return NotFound();
         var provider = new FileExtensionContentTypeProvider();
         if (!provider.TryGetContentType(path, out var contentType)) contentType = "application/octet-stream";

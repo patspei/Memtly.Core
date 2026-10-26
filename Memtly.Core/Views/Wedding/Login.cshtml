@@ -1,0 +1,13 @@
+<main class="wedding-intro">
+    <p class="wedding-eyebrow">Schön, dass du da bist</p>
+    <h1>Willkommen zu unserer Hochzeit</h1>
+    <p>Gib unseren Zugangscode ein, um Erinnerungen anzusehen und deine Fotos zu teilen.</p>
+    <form method="post" action="/Wedding/Login">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+        <label for="wedding-code">Zugangscode</label>
+        <input id="wedding-code" class="form-control my-3" type="password" name="code" maxlength="256" required autocomplete="off" autofocus />
+        @if (ViewBag.AccessError != null) { <p role="alert">@ViewBag.AccessError</p> }
+        <button class="wedding-button" type="submit">Erinnerungen entdecken</button>
+    </form>
+</main>

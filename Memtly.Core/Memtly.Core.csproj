@@ -72,6 +72,9 @@
     <Content Include="Assets\BrokenImage.webp">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="Assets\Heif\policy.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Assets\BrokenVideo.webp">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

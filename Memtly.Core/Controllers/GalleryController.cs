@@ -82,6 +82,9 @@ namespace Memtly.Core.Controllers
                 return await ErrorResponse(ErrorCode.InvalidGalleryId);
             }
 
+            if (WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>()).IsWedding(gallery))
+                return RedirectToAction("Login", "Wedding", new { returnUrl = $"/Gallery?identifier={Uri.EscapeDataString(gallery.Identifier)}" });
+
             return View(new Views.Gallery.LoginModel() 
             {
                 Identifier = gallery.Identifier
@@ -147,6 +150,9 @@ namespace Memtly.Core.Controllers
             {
                 return await ErrorResponse(ErrorCode.InvalidGalleryId);
             }
+
+            if (WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>()).IsWedding(gallery))
+                return Json(new { success = true, redirectUrl = $"/Wedding/Login?returnUrl={Uri.EscapeDataString($"/Gallery?identifier={gallery.Identifier}")}" });
 
             var append = new List<KeyValuePair<string, string>>()
             {
@@ -229,8 +235,9 @@ namespace Memtly.Core.Controllers
                     _fileHelper.CreateDirectoryIfNotExists(galleryPath);
                     _fileHelper.CreateDirectoryIfNotExists(Path.Combine(galleryPath, "Pending"));
 
+                    var wedding = WeddingOptions.Read(HttpContext.RequestServices?.GetService<IConfiguration>());
                     ViewBag.GalleryIdentifier = gallery.Identifier;
-                    ViewBag.SecretKey = gallery.SecretKey;
+                    ViewBag.SecretKey = wedding.IsWedding(gallery) ? string.Empty : gallery.SecretKey;
 
                     var currentPage = 1;
                     try
@@ -283,7 +290,7 @@ namespace Memtly.Core.Controllers
                     }
 
                     var itemsPerPage = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.ItemsPerPage, 50, gallery?.Id);
-                    var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", gallery?.Id)).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+                    var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov", gallery?.Id)).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
                     var showPendingUploads = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.ShowPendingUploads, true, gallery?.Id);
                     var scope = await _mediaAccess.GetScope(HttpContext, gallery!);
 
@@ -364,7 +371,7 @@ namespace Memtly.Core.Controllers
                     var model = new PhotoGallery()
                     {
                         Gallery = gallery,
-                        SecretKey = gallery.SecretKey,
+                        SecretKey = wedding.IsWedding(gallery) ? string.Empty : gallery.SecretKey,
                         Images = items?.Select(x => {
                             var galleryIdentifier = galleryIdentifiers != null && galleryIdentifiers.ContainsKey(x.GalleryId) ? galleryIdentifiers[x.GalleryId] : new GalleryIdentifierModel(gallery.Id, gallery.Identifier, gallery.Name);
                             return new PhotoGalleryImage()
@@ -430,6 +437,8 @@ namespace Memtly.Core.Controllers
         }
 
         [HttpPost]
+        [RequestSizeLimit(64 * 1024 * 1024)]
+        [RequestFormLimits(MemoryBufferThreshold = 64 * 1024, MultipartBodyLengthLimit = 64 * 1024 * 1024, ValueLengthLimit = 4096)]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public async Task<IActionResult> UploadFileChunk([FromForm] MediaUploadRequest request)
         {
@@ -477,13 +486,15 @@ namespace Memtly.Core.Controllers
                         if (request.File != null)
                         {
                             var extension = Path.GetExtension(request.File.FileName);
-                            if (extension.Equals(".heic", StringComparison.OrdinalIgnoreCase) || extension.Equals(".heif", StringComparison.OrdinalIgnoreCase))
-                                return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, "HEIC/HEIF wird nicht unterstützt. Bitte exportiere deine Fotos als JPEG oder wähle auf dem iPhone unter Kamera → Formate die Option Maximale Kompatibilität."));
                             var maxGallerySize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxSizeMB, 1024L, collection?.Id ?? gallery.Id) * 1000000;
                             var maxFilesSize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxFileSizeMB, 50L, collection?.Id ?? gallery.Id) * 1000000;
                             var isDemoMode = await _settings.GetOrDefault(MemtlyConfiguration.IsDemoMode, false);
+                            if (request.FileSize <= 0 || request.File.Length <= 0 || request.File.Length > maxFilesSize ||
+                                request.TotalChunks is < 1 or > 1024 || request.ChunkIndex < 0 || request.ChunkIndex >= request.TotalChunks ||
+                                !Guid.TryParse(request.UploadId, out _))
+                                return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, "Ungültiger Upload. Bitte wähle die Datei erneut aus."));
 
-                            var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.mp4,.mov", collection?.Id ?? gallery.Id)).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                            var allowedFileTypes = (await _settings.GetOrDefault(MemtlyConfiguration.Gallery.AllowedFileTypes, ".jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov", collection?.Id ?? gallery.Id)).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                             if (!allowedFileTypes.Any(x => string.Equals(x.Trim('.'), extension.Trim('.'), StringComparison.OrdinalIgnoreCase)))
                             {
                                 return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, $"{_localizer["File_Upload_Failed"].Value}. {_localizer["Invalid_File_Type"].Value}"));
@@ -504,6 +515,14 @@ namespace Memtly.Core.Controllers
                             {
                                 string uploadedBy = HttpContext.Session.GetString(SessionKey.Viewer.Identity)?.Trim() ?? "Anonymous";
                                 string uploaderEmail = HttpContext.Session.GetString(SessionKey.Viewer.EmailAddress)?.Trim() ?? "Anonymous";
+                                if (wedding.IsWedding(gallery) && !UploaderIdentity.TryNormalize(uploadedBy, out uploadedBy)) uploadedBy = "Anonymous";
+                                var chunkPrefix = request.TotalChunks > 1 ? UploadSnapshot.Prefix(HttpContext, request) : string.Empty;
+                                if (request.TotalChunks > 1 && !isDemoMode)
+                                {
+                                    var snapshot = UploadSnapshot.Capture(TempDirectory, chunkPrefix, request, uploadedBy, uploaderEmail);
+                                    uploadedBy = snapshot.Name;
+                                    uploaderEmail = snapshot.Email;
+                                }
 
                                 var loggedInUserId = _identity.GetUserId(User);
                                 var loggedInUser = loggedInUserId > 0 ? await _database.GetUser(loggedInUserId) : null;
@@ -543,19 +562,25 @@ namespace Memtly.Core.Controllers
                                 {
                                     _fileHelper.CreateDirectoryIfNotExists(TempDirectory);
 
-                                    var fileName = _fileHelper.SanitizeFilename($"{request.UploadId}_{request.ChunkIndex + 1}.part");
+                                    var fileName = $"{chunkPrefix}_{request.ChunkIndex + 1}.part";
                                     var filePath = Path.Combine(TempDirectory, fileName);
 
                                     await _fileHelper.SaveFile(request.File, filePath, FileMode.Create);
 
-                                    var uploadedChunks = _fileHelper.GetFiles(TempDirectory, $"{request.UploadId}_*.part", SearchOption.TopDirectoryOnly);
+                                    var uploadedChunks = _fileHelper.GetFiles(TempDirectory, $"{chunkPrefix}_*.part", SearchOption.TopDirectoryOnly);
+                                    if (uploadedChunks.Sum(part => new FileInfo(part).Length) > Math.Min(request.FileSize, maxFilesSize))
+                                    {
+                                        foreach (var part in uploadedChunks) _fileHelper.DeleteFileIfExists(part);
+                                        _fileHelper.DeleteFileIfExists(Path.Combine(TempDirectory, chunkPrefix + ".identity.json"));
+                                        return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, "Die Datei überschreitet die erlaubte Größe."));
+                                    }
                                     if (uploadedChunks.Count() == request.TotalChunks)
                                     {
                                         await using (var output = System.IO.File.Create(finalFilePath))
                                         {
                                             for (var i = 0; i < request.TotalChunks; i++)
                                             {
-                                                var chunkFileName = _fileHelper.SanitizeFilename($"{request.UploadId}_{i + 1}.part");
+                                                var chunkFileName = $"{chunkPrefix}_{i + 1}.part";
                                                 var chunkPath = Path.Combine(TempDirectory, chunkFileName);
                                                 await using var chunkStream = System.IO.File.OpenRead(chunkPath);
                                                 await chunkStream.CopyToAsync(output);
@@ -564,6 +589,7 @@ namespace Memtly.Core.Controllers
 
                                         if (!string.IsNullOrWhiteSpace(finalFilePath) && _fileHelper.FileExists(finalFilePath))
                                         {
+                                            _fileHelper.DeleteFileIfExists(Path.Combine(TempDirectory, chunkPrefix + ".identity.json"));
                                             foreach (var part in uploadedChunks)
                                             {
                                                 _fileHelper.DeleteFileIfExists(part);
@@ -579,7 +605,16 @@ namespace Memtly.Core.Controllers
 
                                 if (!string.IsNullOrWhiteSpace(finalFilePath) && _fileHelper.FileExists(finalFilePath))
                                 {
+                                    if (!isDemoMode && (new FileInfo(finalFilePath).Length != request.FileSize ||
+                                        new FileInfo(finalFilePath).Length > maxFilesSize || !UploadMediaValidator.IsValid(finalFilePath)))
+                                    {
+                                        _fileHelper.DeleteFileIfExists(finalFilePath);
+                                        return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId,
+                                            "Die Datei ist beschädigt, zu groß oder ihr Inhalt passt nicht zum Dateiformat. Bitte exportiere das Foto gegebenenfalls als JPEG."));
+                                    }
                                     var imageOrientation = ImageOrientation.Unknown;
+                                    var thumbnailGenerated = false;
+                                    string? generatedThumbnailPath = null;
 
                                     try
                                     {
@@ -589,9 +624,10 @@ namespace Memtly.Core.Controllers
                                         _fileHelper.CreateDirectoryIfNotExists(thumbnailPath);
 
                                         var savePath = Path.Combine(thumbnailPath, $"{Path.GetFileNameWithoutExtension(finalFilePath)}.webp");
+                                        generatedThumbnailPath = savePath;
                                         var thumbnailSize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.Thumbnails.Size, 720, gallery.Id);
                                         
-                                        await _imageHelper.GenerateThumbnail(finalFilePath, savePath, thumbnailSize);
+                                        thumbnailGenerated = await _imageHelper.GenerateThumbnail(finalFilePath, savePath, thumbnailSize);
                                         
                                         imageOrientation = _imageHelper.GetOrientation(savePath);
                                     }
@@ -600,6 +636,13 @@ namespace Memtly.Core.Controllers
                                         _logger.LogWarning(ex, $"{_localizer["Failed_To_Generate_Thumbnail"].Value} - '{finalFilePath}' - {ex?.Message}");
                                     }
 
+                                    if (!thumbnailGenerated && _imageHelper.GetMediaType(finalFilePath) == MediaType.Image)
+                                    {
+                                        _fileHelper.DeleteFileIfExists(finalFilePath);
+                                        if (generatedThumbnailPath != null) _fileHelper.DeleteFileIfExists(generatedThumbnailPath);
+                                        return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId,
+                                            "Dieses Foto konnte nicht verarbeitet werden. Es ist möglicherweise beschädigt oder zu groß. Bitte exportiere es als JPEG und versuche es erneut."));
+                                    }
                                     var item = await _database.AddGalleryItem(new GalleryItemModel()
                                     {
                                         GalleryId = gallery.Id,

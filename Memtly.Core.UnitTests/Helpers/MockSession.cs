@@ -10,7 +10,7 @@ namespace Memtly.Core.UnitTests.Helpers
 
         public bool IsAvailable => throw new NotImplementedException();
 
-        public string Id => throw new NotImplementedException();
+        public string Id { get; } = Guid.NewGuid().ToString();
 
         public IEnumerable<string> Keys => throw new NotImplementedException();
 

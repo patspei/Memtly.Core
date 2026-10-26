@@ -47,6 +47,16 @@ public sealed class MediaAccessHelper(IDatabaseHelper database, IIdentityHelper 
 
     public async Task<bool> CanAccessGallery(HttpContext context, GalleryModel gallery, string? secretKey = null)
     {
+        var wedding = Models.WeddingOptions.Read(configuration);
+        if (wedding.IsWedding(gallery))
+        {
+            if (!wedding.ValidType(gallery)) return false;
+            if (CanManage(context, gallery)) return true;
+            var weddingGalleries = await WeddingAccessHelper.Resolve(database, wedding);
+            return WeddingAccessHelper.IsGranted(context, wedding, weddingGalleries) &&
+                weddingGalleries!.Any(g => g.Id == gallery.Id) &&
+                context.Session.GetString(GrantKey(gallery.Id)) == KeyDigest(gallery);
+        }
         if (secretKey != null && !string.IsNullOrEmpty(gallery.SecretKey) &&
             !string.Equals(secretKey, gallery.SecretKey, StringComparison.Ordinal)) return false;
         if (gallery.Id <= 0 || gallery.Identifier.Equals(SystemGalleries.AllGallery, StringComparison.OrdinalIgnoreCase))
