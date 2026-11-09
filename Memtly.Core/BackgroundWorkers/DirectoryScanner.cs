@@ -95,6 +95,7 @@ namespace Memtly.Core.BackgroundWorkers
                         using (var scope = _scopeFactory.CreateScope())
                         {
                             var db = scope.ServiceProvider.GetRequiredService<IDatabaseHelper>();
+                            var thumbnails = scope.ServiceProvider.GetRequiredService<IMediaThumbnailHelper>();
                             var localizer = scope.ServiceProvider.GetRequiredService<IStringLocalizer<Localization.Translations>>();
 
                             var systemUser = await db.GetUserByUsername(UserAccounts.SystemUser);
@@ -175,6 +176,7 @@ namespace Memtly.Core.BackgroundWorkers
                                                                     DateTaken = fileCreated,
                                                                     FileSize = _fileHelper.FileSize(file)
                                                                 });
+                                                                if (g != null) await thumbnails.PreparePreview(galleryItem, g);
                                                                 await _auditHelper.LogAction($"Directory scanner added new approved item '{filename}' to gallery '{identifier}'", AuditSeverity.Verbose);
                                                             }
 
@@ -253,7 +255,7 @@ namespace Memtly.Core.BackgroundWorkers
                                                                 {
                                                                     var fileCreated = _imageHelper.GetExifCreationDateTaken(file) ?? await _fileHelper.GetCreationDatetime(file);
 
-                                                                    await db.AddGalleryItem(new GalleryItemModel()
+                                                                    var pending = await db.AddGalleryItem(new GalleryItemModel()
                                                                     {
                                                                         GalleryId = galleryItem.Id,
                                                                         GalleryName = galleryItem.Name,
@@ -265,6 +267,7 @@ namespace Memtly.Core.BackgroundWorkers
                                                                         DateTaken = fileCreated,
                                                                         FileSize = new FileInfo(file).Length
                                                                     });
+                                                                    if (pending != null) await thumbnails.PreparePreview(galleryItem, pending);
                                                                     await _auditHelper.LogAction($"Directory scanner added new pending item '{filename}' to gallery '{identifier}'", AuditSeverity.Verbose);
                                                                 }
 

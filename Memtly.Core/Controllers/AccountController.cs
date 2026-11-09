@@ -37,6 +37,7 @@ namespace Memtly.Core.Controllers
         private readonly IDeviceDetector _deviceDetector;
         private readonly IFileHelper _fileHelper;
         private readonly IImageHelper _imageHelper;
+        private readonly IMediaThumbnailHelper _thumbnails;
         private readonly IEncryptionHelper _encryption;
         private readonly INotificationHelper _notificationHelper;
         private readonly ISmtpClientWrapper _smtpClientWrapper;
@@ -54,7 +55,7 @@ namespace Memtly.Core.Controllers
         private readonly string ThumbnailsDirectory;
         private readonly string CustomResourcesDirectory;
 
-        public AccountController(ISettingsHelper settings, IDatabaseHelper database, IDeviceDetector deviceDetector, IFileHelper fileHelper, IImageHelper imageHelper, IEncryptionHelper encryption, INotificationHelper notificationHelper, ISmtpClientWrapper smtpClientWrapper, Helpers.IUrlHelper url, IAuditHelper audit, IIdentityHelper identity, ILoggerFactory loggerFactory, IStringLocalizer<Localization.Translations> localizer)
+        public AccountController(ISettingsHelper settings, IDatabaseHelper database, IDeviceDetector deviceDetector, IFileHelper fileHelper, IImageHelper imageHelper, IEncryptionHelper encryption, INotificationHelper notificationHelper, ISmtpClientWrapper smtpClientWrapper, Helpers.IUrlHelper url, IAuditHelper audit, IIdentityHelper identity, ILoggerFactory loggerFactory, IStringLocalizer<Localization.Translations> localizer, IMediaThumbnailHelper thumbnails)
             : base()
         {
             _settings = settings;
@@ -62,6 +63,7 @@ namespace Memtly.Core.Controllers
             _deviceDetector = deviceDetector;
             _fileHelper = fileHelper;
             _imageHelper = imageHelper;
+            _thumbnails = thumbnails;
             _encryption = encryption;
             _notificationHelper = notificationHelper;
             _smtpClientWrapper = smtpClientWrapper;
@@ -1004,6 +1006,7 @@ namespace Memtly.Core.Controllers
 
                                 review.State = GalleryItemState.Approved;
                                 await _database.EditGalleryItem(review);
+                                await _thumbnails.PreparePreview(gallery, review);
 
                                 await _audit.LogAction(_identity.GetUserId(User), $"'{review.Title}' {_localizer["Audit_ItemApprovedInGallery"].Value} '{gallery.Identifier}'", AuditSeverity.Verbose);
                             }
@@ -1095,6 +1098,7 @@ namespace Memtly.Core.Controllers
 
                                         review.State = GalleryItemState.Approved;
                                         await _database.EditGalleryItem(review);
+                                        await _thumbnails.PreparePreview(gallery, review);
 
                                         await _audit.LogAction(_identity.GetUserId(User), _localizer["Audit_BulkApproveReviews"].Value, AuditSeverity.Verbose);
                                     }

@@ -40,15 +40,16 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
         private readonly Memtly.Core.Helpers.IUrlHelper _url = Substitute.For<Memtly.Core.Helpers.IUrlHelper>();
         private readonly IIdentityHelper _identity = Substitute.For<IIdentityHelper>();
         private readonly ILogger<GalleryController> _logger = Substitute.For<ILogger<GalleryController>>();
+        private readonly IMediaThumbnailHelper _thumbnails = Substitute.For<IMediaThumbnailHelper>();
         private readonly IStringLocalizer<Memtly.Localization.Translations> _localizer = Substitute.For<IStringLocalizer<Memtly.Localization.Translations>>();
 
-        private GalleryController CreateController(IConfiguration? configuration = null, IIdentityHelper? identity = null)
+        private GalleryController CreateController(IConfiguration? configuration = null, IIdentityHelper? identity = null, IMediaThumbnailHelper? thumbnails = null)
         {
             identity ??= _identity;
             var access = new MediaAccessHelper(_database, identity, _settings, configuration);
             return new GalleryController(_settings, _database, _file, _deviceDetector, _image, _notification,
                 _encryption, _url, identity, _logger, _localizer, access,
-                new GalleryDownloadHelper(_database, access, new MediaFileStore(), identity, _settings));
+                new GalleryDownloadHelper(_database, access, new MediaFileStore(), identity, _settings), thumbnails ?? _thumbnails);
         }
         public GalleryControllerTests()
         {
@@ -673,6 +674,65 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             Assert.That(JsonResponseHelper.GetPropertyValue(actual.Value, "Success", false), Is.True);
             Assert.That(JsonResponseHelper.GetPropertyValue(actual.Value, "Complete", false), Is.True);
             Assert.That(JsonResponseHelper.GetPropertyValue(actual.Value, "Errors", new List<string>()).Count, Is.EqualTo(0));
+        }
+
+        [TestCase(false, 1)]
+        [TestCase(true, 1)]
+        [TestCase(false, 2)]
+        [TestCase(true, 2)]
+        public async Task CompletedImageUploadPreparesReusablePreviewBeforeResponding(bool requiresReview, int chunks)
+        {
+            var gallery = new GalleryModel { Id = 1, Identifier = "preview-upload-" + Guid.NewGuid().ToString("N"),
+                Name = "Preview upload", Type = GalleryType.Basic, Owner = 2 };
+            _database.GetGallery(1).Returns(gallery);
+            _database.GetUser(Arg.Any<int>()).Returns(new UserModel { Id = 2, Level = UserLevel.Admin });
+            _database.AddGalleryItem(Arg.Any<GalleryItemModel>()).Returns(call =>
+            {
+                var item = call.Arg<GalleryItemModel>();
+                item.Id = 42;
+                return item;
+            });
+            _settings.GetOrDefault(MemtlyConfiguration.Gallery.RequireReview, Arg.Any<bool>(), Arg.Any<int?>()).Returns(requiresReview);
+            _file.FileExists(Arg.Any<string>()).Returns(call => File.Exists(call.Arg<string>()));
+            _file.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>()).Returns(call =>
+                Directory.GetFiles(call.ArgAt<string>(0), call.ArgAt<string>(1), call.ArgAt<SearchOption>(2)));
+            _image.GetMediaType(Arg.Any<string>()).Returns(MediaType.Image);
+            _image.GeneratePreview(Arg.Any<string>(), Arg.Any<string>()).Returns(async call =>
+            {
+                // Keep generation asynchronous to catch an unawaited preparation call.
+                await Task.Delay(25);
+                await File.WriteAllTextAsync(call.ArgAt<string>(1), "prepared preview");
+                return true;
+            });
+            _image.ClearReceivedCalls();
+            _database.ClearReceivedCalls();
+            var files = new MediaFileStore();
+            var thumbnails = new MediaThumbnailHelper(files, _image, _settings, Substitute.For<ILogger<MediaThumbnailHelper>>());
+            var controller = CreateController(thumbnails: thumbnails);
+            controller.ControllerContext.HttpContext = MockData.MockHttpContext();
+            var request = new MediaUploadRequest { RequestId = Guid.NewGuid().ToString(), UploadId = Guid.NewGuid().ToString(),
+                GalleryId = 1, CollectionId = 0, ChunkIndex = 0, File = Photo(), FileSize = TestPhoto.Length,
+                FileChecksum = Guid.NewGuid().ToString(), TotalChunks = chunks };
+            if (chunks == 2)
+            {
+                request.File = new FormFile(new MemoryStream(TestPhoto.Take(30).ToArray()), 0, 30, "File", "photo.png");
+                var partial = (JsonResult)await controller.UploadFileChunk(request);
+                Assert.That(JsonResponseHelper.GetPropertyValue(partial.Value, "Complete", true), Is.False);
+                await _image.DidNotReceive().GeneratePreview(Arg.Any<string>(), Arg.Any<string>());
+                request.ChunkIndex = 1;
+                request.File = new FormFile(new MemoryStream(TestPhoto.Skip(30).ToArray()), 0, TestPhoto.Length - 30, "File", "photo.png");
+            }
+            var response = (JsonResult)await controller.UploadFileChunk(request);
+            Assert.That(JsonResponseHelper.GetPropertyValue(response.Value, "Complete", false), Is.True);
+            var saved = (GalleryItemModel)_database.ReceivedCalls().Single(c => c.GetMethodInfo().Name == "AddGalleryItem").GetArguments()[0]!;
+            Assert.That(saved.State, Is.EqualTo(requiresReview ? GalleryItemState.Pending : GalleryItemState.Approved));
+            var cacheDirectory = Path.GetDirectoryName(files.GetThumbnailCachePath(gallery, "test.webp"))!;
+            var cached = Directory.GetFiles(cacheDirectory, "*.webp");
+            uploadPaths.AddRange(cached);
+            Assert.That(cached, Has.Length.EqualTo(1), "The preview must already exist when the upload completes.");
+            Assert.That(await thumbnails.GetPreviewPath(gallery, saved), Is.EqualTo(cached[0]));
+            await _image.Received(1).GeneratePreview(Arg.Any<string>(), Arg.Any<string>());
+            Assert.That(await File.ReadAllBytesAsync(files.GetPath(gallery, saved)!), Is.EqualTo(TestPhoto));
         }
 
         [TestCase("Unsere Hochzeit", GalleryType.Basic, false, false)]

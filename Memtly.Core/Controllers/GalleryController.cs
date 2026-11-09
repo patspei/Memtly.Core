@@ -35,6 +35,7 @@ namespace Memtly.Core.Controllers
         private readonly IStringLocalizer<Localization.Translations> _localizer;
         private readonly IMediaAccessHelper _mediaAccess;
         private readonly GalleryDownloadHelper _downloads;
+        private readonly IMediaThumbnailHelper _thumbnails;
 
         private readonly string RootDirectory;
         private readonly string AssetsDirectory;
@@ -42,7 +43,7 @@ namespace Memtly.Core.Controllers
         private readonly string UploadsDirectory;
         private readonly string ThumbnailsDirectory;
 
-        public GalleryController(ISettingsHelper settings, IDatabaseHelper database, IFileHelper fileHelper, IDeviceDetector deviceDetector, IImageHelper imageHelper, INotificationHelper notificationHelper, IEncryptionHelper encryptionHelper, Helpers.IUrlHelper urlHelper, IIdentityHelper identity, ILogger<GalleryController> logger, IStringLocalizer<Localization.Translations> localizer, IMediaAccessHelper mediaAccess, GalleryDownloadHelper downloads)
+        public GalleryController(ISettingsHelper settings, IDatabaseHelper database, IFileHelper fileHelper, IDeviceDetector deviceDetector, IImageHelper imageHelper, INotificationHelper notificationHelper, IEncryptionHelper encryptionHelper, Helpers.IUrlHelper urlHelper, IIdentityHelper identity, ILogger<GalleryController> logger, IStringLocalizer<Localization.Translations> localizer, IMediaAccessHelper mediaAccess, GalleryDownloadHelper downloads, IMediaThumbnailHelper thumbnails)
             : base()
         {
             _settings = settings;
@@ -58,6 +59,7 @@ namespace Memtly.Core.Controllers
             _localizer = localizer;
             _mediaAccess = mediaAccess;
             _downloads = downloads;
+            _thumbnails = thumbnails;
 
             RootDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!;
             AssetsDirectory = Path.Combine(RootDirectory, Directories.Private.Assets);
@@ -670,6 +672,8 @@ namespace Memtly.Core.Controllers
                                         State = requiresReview ? GalleryItemState.Pending : GalleryItemState.Approved,
                                         FileSize = request.FileSize,
                                     });
+
+                                    if (item != null) await _thumbnails.PreparePreview(gallery, item);
 
                                     Response.StatusCode = (int)HttpStatusCode.OK;
                                     return Json(new MediaUploadCompleteResponse(request.RequestId, request.UploadId));

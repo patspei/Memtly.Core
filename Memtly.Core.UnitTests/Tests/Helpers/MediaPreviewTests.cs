@@ -140,7 +140,7 @@ public class MediaPreviewTests
             await File.WriteAllTextAsync(call.ArgAt<string>(1), "thumbnail");
             return true;
         });
-        MediaThumbnailHelper Helper() => new(files, generator, settings);
+        MediaThumbnailHelper Helper() => new(files, generator, settings, Substitute.For<ILogger<MediaThumbnailHelper>>());
         var previews = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => Helper().GetPreviewPath(gallery, item)));
         Assert.That(previews.All(p => p != null && p == previews[0]), Is.True);
         await generator.Received(1).GeneratePreview(Arg.Any<string>(), Arg.Any<string>());
@@ -160,6 +160,68 @@ public class MediaPreviewTests
         Assert.That(await Helper().GetPreviewPath(gallery, item), Is.Null);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task PreparationFailureKeepsOriginalAndAllowsOnDemandRetry(bool throws)
+    {
+        var gallery = new GalleryModel { Id = 1, Identifier = "gallery" };
+        var item = new GalleryItemModel { Id = 1, GalleryId = 1, Title = "photo.jpg", State = GalleryItemState.Pending, MediaType = MediaType.Image };
+        var input = Path.Combine(Directory.CreateDirectory(Path.Combine(directory, "uploads", gallery.Identifier, "Pending")).FullName, item.Title);
+        await File.WriteAllTextAsync(input, "original");
+        var generator = Substitute.For<IImageHelper>();
+        var attempt = 0;
+        generator.GeneratePreview(Arg.Any<string>(), Arg.Any<string>()).Returns(async call =>
+        {
+            await File.WriteAllTextAsync(call.ArgAt<string>(1), "preview");
+            if (++attempt > 1) return true;
+            if (throws) throw new InvalidOperationException("Decoder failure");
+            return false;
+        });
+        var helper = new MediaThumbnailHelper(new MediaFileStore(directory), generator, Substitute.For<ISettingsHelper>(),
+            Substitute.For<ILogger<MediaThumbnailHelper>>());
+        await helper.PreparePreview(gallery, item);
+        Assert.That(Directory.GetFiles(Path.Combine(directory, "thumbnails"), "*.webp", SearchOption.AllDirectories), Is.Empty);
+        Assert.That(await File.ReadAllTextAsync(input), Is.EqualTo("original"));
+        Assert.That(await helper.GetPreviewPath(gallery, item), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task ApprovalPreparesTheNewCacheVariantAndGuestsReuseIt()
+    {
+        var gallery = new GalleryModel { Id = 1, Identifier = "gallery" };
+        var item = new GalleryItemModel { Id = 1, GalleryId = 1, Title = "photo.png", State = GalleryItemState.Pending, MediaType = MediaType.Image };
+        var pending = Directory.CreateDirectory(Path.Combine(directory, "uploads", gallery.Identifier, "Pending")).FullName;
+        var original = Image(80, 120, SKEncodedImageFormat.Png, ".png");
+        var bytes = File.ReadAllBytes(original);
+        File.Copy(original, Path.Combine(pending, item.Title));
+        var files = new MediaFileStore(directory);
+        var helper = new MediaThumbnailHelper(files, images, Substitute.For<ISettingsHelper>(),
+            Substitute.For<ILogger<MediaThumbnailHelper>>());
+        await helper.PreparePreview(gallery, item);
+        var pendingPreview = await helper.GetPreviewPath(gallery, item);
+        File.Move(Path.Combine(pending, item.Title), Path.Combine(Path.GetDirectoryName(pending)!, item.Title));
+        item.State = GalleryItemState.Approved;
+        await helper.PreparePreview(gallery, item);
+        var approvedPreview = await helper.GetPreviewPath(gallery, item);
+        Assert.That(approvedPreview, Is.Not.Null.And.Not.EqualTo(pendingPreview));
+        var timestamp = File.GetLastWriteTimeUtc(approvedPreview!);
+        var nextRequest = new MediaThumbnailHelper(files, images, Substitute.For<ISettingsHelper>(),
+            Substitute.For<ILogger<MediaThumbnailHelper>>());
+        Assert.That(await nextRequest.GetPreviewPath(gallery, item), Is.EqualTo(approvedPreview));
+        Assert.That(File.GetLastWriteTimeUtc(approvedPreview!), Is.EqualTo(timestamp));
+        Assert.That(File.ReadAllBytes(files.GetPath(gallery, item)!), Is.EqualTo(bytes));
+    }
+
+    [Test]
+    public async Task VideoPreparationDoesNotAttemptImageGeneration()
+    {
+        var generator = Substitute.For<IImageHelper>();
+        var helper = new MediaThumbnailHelper(new MediaFileStore(directory), generator, Substitute.For<ISettingsHelper>(),
+            Substitute.For<ILogger<MediaThumbnailHelper>>());
+        await helper.PreparePreview(new GalleryModel(), new GalleryItemModel { MediaType = MediaType.Video });
+        await generator.DidNotReceive().GeneratePreview(Arg.Any<string>(), Arg.Any<string>());
+    }
+
     [Test]
     public async Task SourceChangedDuringGenerationIsNotPublishedAndFailureCanBeRetried()
     {
@@ -176,7 +238,8 @@ public class MediaPreviewTests
             if (attempt == 1) await File.WriteAllTextAsync(input, "replaced original");
             return attempt != 2;
         });
-        var helper = new MediaThumbnailHelper(new MediaFileStore(directory), generator, Substitute.For<ISettingsHelper>());
+        var helper = new MediaThumbnailHelper(new MediaFileStore(directory), generator, Substitute.For<ISettingsHelper>(),
+            Substitute.For<ILogger<MediaThumbnailHelper>>());
         Assert.That(await helper.GetPreviewPath(gallery, item), Is.Null);
         Assert.That(await helper.GetPreviewPath(gallery, item), Is.Null);
         Assert.That(Directory.GetFiles(Path.Combine(directory, "thumbnails"), "*.webp", SearchOption.AllDirectories), Is.Empty);

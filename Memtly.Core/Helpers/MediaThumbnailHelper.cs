@@ -9,11 +9,13 @@ public interface IMediaThumbnailHelper
 {
     Task<string?> GetPath(GalleryModel gallery, GalleryItemModel item);
     Task<string?> GetPreviewPath(GalleryModel gallery, GalleryItemModel item);
+    Task PreparePreview(GalleryModel gallery, GalleryItemModel item);
 }
 
 /// <summary>Build from the authorized original, never a shared basename thumbnail
 /// that might have been overwritten by a pending file with another extension.</summary>
-public sealed class MediaThumbnailHelper(IMediaFileStore files, IImageHelper images, ISettingsHelper settings) : IMediaThumbnailHelper
+public sealed class MediaThumbnailHelper(IMediaFileStore files, IImageHelper images, ISettingsHelper settings,
+    ILogger<MediaThumbnailHelper> logger) : IMediaThumbnailHelper
 {
     // Bounded process-wide locks also coordinate separate request-scoped helpers.
     private static readonly SemaphoreSlim[] GenerationLocks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1)).ToArray();
@@ -23,6 +25,22 @@ public sealed class MediaThumbnailHelper(IMediaFileStore files, IImageHelper ima
 
     public async Task<string?> GetPreviewPath(GalleryModel gallery, GalleryItemModel item)
         => item.MediaType == Enums.MediaType.Image ? await GetVariant(gallery, item, true) : null;
+
+    public async Task PreparePreview(GalleryModel gallery, GalleryItemModel item)
+    {
+        if (item.MediaType != Enums.MediaType.Image) return;
+        // A derived image must never turn an already saved upload or review into a failure.
+        // The authorized preview endpoint can retry on demand if preparation fails.
+        try
+        {
+            if (await GetPreviewPath(gallery, item) == null)
+                logger.LogWarning("Could not prepare preview for gallery item {ItemId}", item.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not prepare preview for gallery item {ItemId}", item.Id);
+        }
+    }
 
     private async Task<string?> GetVariant(GalleryModel gallery, GalleryItemModel item, bool preview)
     {
