@@ -64,11 +64,22 @@ class MediaViewer {
     }
 
     bindLoadEvent() {
-        $('.media-viewer-image').on('load', (e) => {
-            const element = $(e.currentTarget).closest('.media-viewer');
+        const ready = image => {
+            if (image.dataset.viewerReady) return;
+            image.dataset.viewerReady = 'true';
+            const element = $(image).closest('.media-viewer');
             const type = element.data('type');
             const source = element.data('source');
             this.initMediaViewImage(type, source);
+        };
+        $('.media-viewer-image').off('load.mediaViewer').on('load.mediaViewer', e => ready(e.currentTarget)).each((_, image) => {
+            // A small cached preview can finish before the AJAX fragment is bound.
+            if (image.complete && image.naturalWidth > 0) ready(image);
+        });
+        $(window).off('resize.mediaViewer').on('resize.mediaViewer', () => {
+            const image = $('.media-viewer-image');
+            if (image.length && image.closest('.media-viewer').data('type') !== 'video')
+                this.fitImageViewer($('#media-viewer-wrapper'));
         });
     }
 
@@ -381,6 +392,8 @@ class MediaViewer {
     }
 
     hideMediaViewer() {
+        clearTimeout(this.resizePopupTimeout);
+        this.resizePopupTimeout = null;
         $('div#media-viewer-wrapper').hide();
         $('div#media-viewer-wrapper').remove();
     }
@@ -391,6 +404,10 @@ class MediaViewer {
     }
 
     resizeMediaViewer(iteration, popup, type, source) {
+        if (type !== 'video') {
+            this.fitImageViewer(popup);
+            return;
+        }
         let container = popup.find('.media-viewer-popup');
         let mediaContainer = container.find('.media-viewer-content');
         let media = mediaContainer.find('img');
@@ -437,6 +454,38 @@ class MediaViewer {
 
             popup.fadeTo(500, 1.0);
         }
+    }
+
+    fitImageViewer(popup) {
+        const container = popup.find('.media-viewer-popup');
+        const viewer = container.find('.media-viewer');
+        const media = container.find('.media-viewer-image');
+        const image = media[0];
+        if (!image?.naturalWidth || !image.naturalHeight) return;
+        const margin = window.innerWidth > 900 ? 50 : 20;
+        const horizontalBorder = viewer.outerWidth() - viewer.width();
+        const maxWidth = Math.max(1, popup.innerWidth() - margin * 2 - horizontalBorder);
+        const maxHeight = Math.max(1, popup.innerHeight() - margin * 2);
+        const rows = container.find('.media-viewer-row');
+        const applyWidth = width => {
+            container.width(width + horizontalBorder);
+            rows.css('max-width', `${width}px`);
+            media.width(width);
+        };
+        applyWidth(maxWidth);
+        // Measure captions and controls at the actual width, then fit the image in one
+        // layout pass. A second pass accounts for text wrapping in portrait layouts.
+        for (let pass = 0; pass < 2; pass++) {
+            const chromeHeight = container.outerHeight() - media.outerHeight();
+            const scale = Math.min(maxWidth / image.naturalWidth,
+                Math.max(1, maxHeight - chromeHeight) / image.naturalHeight);
+            applyWidth(Math.max(1, Math.floor(image.naturalWidth * scale)));
+        }
+        container.css({
+            top: `${Math.max(margin, (popup.innerHeight() - container.outerHeight()) / 2)}px`,
+            left: `${Math.max(margin, (popup.innerWidth() - container.outerWidth()) / 2)}px`
+        });
+        popup.css('opacity', 1);
     }
 
     like(id, action) {
