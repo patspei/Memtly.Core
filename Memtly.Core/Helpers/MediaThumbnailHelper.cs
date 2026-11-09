@@ -9,7 +9,7 @@ public interface IMediaThumbnailHelper
 {
     Task<string?> GetPath(GalleryModel gallery, GalleryItemModel item);
     Task<string?> GetPreviewPath(GalleryModel gallery, GalleryItemModel item);
-    Task PreparePreview(GalleryModel gallery, GalleryItemModel item);
+    Task PrepareImages(GalleryModel gallery, GalleryItemModel item);
 }
 
 /// <summary>Build from the authorized original, never a shared basename thumbnail
@@ -26,19 +26,25 @@ public sealed class MediaThumbnailHelper(IMediaFileStore files, IImageHelper ima
     public async Task<string?> GetPreviewPath(GalleryModel gallery, GalleryItemModel item)
         => item.MediaType == Enums.MediaType.Image ? await GetVariant(gallery, item, true) : null;
 
-    public async Task PreparePreview(GalleryModel gallery, GalleryItemModel item)
+    public async Task PrepareImages(GalleryModel gallery, GalleryItemModel item)
     {
         if (item.MediaType != Enums.MediaType.Image) return;
+        await Prepare(() => GetPath(gallery, item), item.Id, "thumbnail");
+        await Prepare(() => GetPreviewPath(gallery, item), item.Id, "preview");
+    }
+
+    private async Task Prepare(Func<Task<string?>> generate, int itemId, string variant)
+    {
         // A derived image must never turn an already saved upload or review into a failure.
         // The authorized preview endpoint can retry on demand if preparation fails.
         try
         {
-            if (await GetPreviewPath(gallery, item) == null)
-                logger.LogWarning("Could not prepare preview for gallery item {ItemId}", item.Id);
+            if (await generate() == null)
+                logger.LogWarning("Could not prepare {Variant} for gallery item {ItemId}", variant, itemId);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not prepare preview for gallery item {ItemId}", item.Id);
+            logger.LogWarning(ex, "Could not prepare {Variant} for gallery item {ItemId}", variant, itemId);
         }
     }
 

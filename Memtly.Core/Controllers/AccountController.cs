@@ -1006,7 +1006,7 @@ namespace Memtly.Core.Controllers
 
                                 review.State = GalleryItemState.Approved;
                                 await _database.EditGalleryItem(review);
-                                await _thumbnails.PreparePreview(gallery, review);
+                                await _thumbnails.PrepareImages(gallery, review);
 
                                 await _audit.LogAction(_identity.GetUserId(User), $"'{review.Title}' {_localizer["Audit_ItemApprovedInGallery"].Value} '{gallery.Identifier}'", AuditSeverity.Verbose);
                             }
@@ -1098,7 +1098,7 @@ namespace Memtly.Core.Controllers
 
                                         review.State = GalleryItemState.Approved;
                                         await _database.EditGalleryItem(review);
-                                        await _thumbnails.PreparePreview(gallery, review);
+                                        await _thumbnails.PrepareImages(gallery, review);
 
                                         await _audit.LogAction(_identity.GetUserId(User), _localizer["Audit_BulkApproveReviews"].Value, AuditSeverity.Verbose);
                                     }

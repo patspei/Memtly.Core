@@ -697,6 +697,13 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             _file.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>()).Returns(call =>
                 Directory.GetFiles(call.ArgAt<string>(0), call.ArgAt<string>(1), call.ArgAt<SearchOption>(2)));
             _image.GetMediaType(Arg.Any<string>()).Returns(MediaType.Image);
+            _image.GenerateThumbnail(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>()).Returns(async call =>
+            {
+                var path = call.ArgAt<string>(1);
+                await File.WriteAllTextAsync(path, "prepared thumbnail");
+                uploadPaths.Add(path);
+                return true;
+            });
             _image.GeneratePreview(Arg.Any<string>(), Arg.Any<string>()).Returns(async call =>
             {
                 // Keep generation asynchronous to catch an unawaited preparation call.
@@ -729,8 +736,10 @@ namespace Memtly.Core.UnitTests.Tests.Helpers
             var cacheDirectory = Path.GetDirectoryName(files.GetThumbnailCachePath(gallery, "test.webp"))!;
             var cached = Directory.GetFiles(cacheDirectory, "*.webp");
             uploadPaths.AddRange(cached);
-            Assert.That(cached, Has.Length.EqualTo(1), "The preview must already exist when the upload completes.");
-            Assert.That(await thumbnails.GetPreviewPath(gallery, saved), Is.EqualTo(cached[0]));
+            Assert.That(cached, Has.Length.EqualTo(2), "Both protected cache variants must exist when the upload completes.");
+            Assert.That(cached, Does.Contain(await thumbnails.GetPath(gallery, saved)));
+            Assert.That(cached, Does.Contain(await thumbnails.GetPreviewPath(gallery, saved)));
+            await _image.Received(2).GenerateThumbnail(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>());
             await _image.Received(1).GeneratePreview(Arg.Any<string>(), Arg.Any<string>());
             Assert.That(await File.ReadAllBytesAsync(files.GetPath(gallery, saved)!), Is.EqualTo(TestPhoto));
         }

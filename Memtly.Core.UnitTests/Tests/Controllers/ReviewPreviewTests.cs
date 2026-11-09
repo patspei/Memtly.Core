@@ -30,7 +30,7 @@ public class ReviewPreviewTests
         files.MoveFileIfExists(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         var thumbnails = Substitute.For<IMediaThumbnailHelper>();
         var prepared = false;
-        thumbnails.PreparePreview(gallery, item).Returns(async _ =>
+        thumbnails.PrepareImages(gallery, item).Returns(async _ =>
         {
             Assert.That(item.State, Is.EqualTo(GalleryItemState.Approved));
             await database.Received(1).EditGalleryItem(item);

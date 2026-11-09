@@ -179,7 +179,7 @@ public class MediaPreviewTests
         });
         var helper = new MediaThumbnailHelper(new MediaFileStore(directory), generator, Substitute.For<ISettingsHelper>(),
             Substitute.For<ILogger<MediaThumbnailHelper>>());
-        await helper.PreparePreview(gallery, item);
+        await helper.PrepareImages(gallery, item);
         Assert.That(Directory.GetFiles(Path.Combine(directory, "thumbnails"), "*.webp", SearchOption.AllDirectories), Is.Empty);
         Assert.That(await File.ReadAllTextAsync(input), Is.EqualTo("original"));
         Assert.That(await helper.GetPreviewPath(gallery, item), Is.Not.Null);
@@ -197,11 +197,11 @@ public class MediaPreviewTests
         var files = new MediaFileStore(directory);
         var helper = new MediaThumbnailHelper(files, images, Substitute.For<ISettingsHelper>(),
             Substitute.For<ILogger<MediaThumbnailHelper>>());
-        await helper.PreparePreview(gallery, item);
+        await helper.PrepareImages(gallery, item);
         var pendingPreview = await helper.GetPreviewPath(gallery, item);
         File.Move(Path.Combine(pending, item.Title), Path.Combine(Path.GetDirectoryName(pending)!, item.Title));
         item.State = GalleryItemState.Approved;
-        await helper.PreparePreview(gallery, item);
+        await helper.PrepareImages(gallery, item);
         var approvedPreview = await helper.GetPreviewPath(gallery, item);
         Assert.That(approvedPreview, Is.Not.Null.And.Not.EqualTo(pendingPreview));
         var timestamp = File.GetLastWriteTimeUtc(approvedPreview!);
@@ -218,7 +218,7 @@ public class MediaPreviewTests
         var generator = Substitute.For<IImageHelper>();
         var helper = new MediaThumbnailHelper(new MediaFileStore(directory), generator, Substitute.For<ISettingsHelper>(),
             Substitute.For<ILogger<MediaThumbnailHelper>>());
-        await helper.PreparePreview(new GalleryModel(), new GalleryItemModel { MediaType = MediaType.Video });
+        await helper.PrepareImages(new GalleryModel(), new GalleryItemModel { MediaType = MediaType.Video });
         await generator.DidNotReceive().GeneratePreview(Arg.Any<string>(), Arg.Any<string>());
     }
 

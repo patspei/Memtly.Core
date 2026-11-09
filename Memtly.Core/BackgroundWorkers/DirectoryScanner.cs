@@ -176,7 +176,7 @@ namespace Memtly.Core.BackgroundWorkers
                                                                     DateTaken = fileCreated,
                                                                     FileSize = _fileHelper.FileSize(file)
                                                                 });
-                                                                if (g != null) await thumbnails.PreparePreview(galleryItem, g);
+                                                                if (g != null) await thumbnails.PrepareImages(galleryItem, g);
                                                                 await _auditHelper.LogAction($"Directory scanner added new approved item '{filename}' to gallery '{identifier}'", AuditSeverity.Verbose);
                                                             }
 
@@ -267,7 +267,7 @@ namespace Memtly.Core.BackgroundWorkers
                                                                         DateTaken = fileCreated,
                                                                         FileSize = new FileInfo(file).Length
                                                                     });
-                                                                    if (pending != null) await thumbnails.PreparePreview(galleryItem, pending);
+                                                                    if (pending != null) await thumbnails.PrepareImages(galleryItem, pending);
                                                                     await _auditHelper.LogAction($"Directory scanner added new pending item '{filename}' to gallery '{identifier}'", AuditSeverity.Verbose);
                                                                 }
 

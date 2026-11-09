@@ -673,7 +673,7 @@ namespace Memtly.Core.Controllers
                                         FileSize = request.FileSize,
                                     });
 
-                                    if (item != null) await _thumbnails.PreparePreview(gallery, item);
+                                    if (item != null) await _thumbnails.PrepareImages(gallery, item);
 
                                     Response.StatusCode = (int)HttpStatusCode.OK;
                                     return Json(new MediaUploadCompleteResponse(request.RequestId, request.UploadId));

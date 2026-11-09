@@ -38,6 +38,7 @@ namespace Memtly.Core.Extensions
             services.AddFfmpegConfiguration();
 
             services.AddHostedService<DirectoryScanner>();
+            services.AddHostedService<MediaCacheWarmup>();
             services.AddHostedService<NotificationReport>();
             services.AddHostedService<CleanupService>();
 
