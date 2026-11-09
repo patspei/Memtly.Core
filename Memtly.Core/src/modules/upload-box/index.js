@@ -375,15 +375,23 @@ class UploadBox {
                 },
                 xhr: () => {
                     const xhr = new window.XMLHttpRequest();
+                    const isImage = dataRefs.files[fileIndex].type?.startsWith('image/') ||
+                        /\.(jpe?g|png|heic|heif|webp)$/i.test(dataRefs.files[fileIndex].name);
+                    const processingText = isImage ? 'Foto wird verarbeitet …' : 'Datei wird verarbeitet …';
+                    const showProcessing = () => $('span#file-upload-progress').text(processingText);
 
                     xhr.upload.addEventListener("progress", (evt) => {
                         if (evt.lengthComputable) {
                             const percentComplete = Math.floor((start + (end - start) * evt.loaded / evt.total) / dataRefs.files[fileIndex].size * 100);
                             const progressElement = $('span#file-upload-progress');
                             if (progressElement.length > 0) {
-                                progressElement.text(`(${percentComplete}%)`);
+                                progressElement.text(percentComplete >= 100 ? processingText : `(${percentComplete}%)`);
                             }
                         }
+                    }, false);
+
+                    xhr.upload.addEventListener('load', () => {
+                        if (chunkId === totalChunks - 1) showProcessing();
                     }, false);
 
                     xhr.upload.addEventListener("error", (evt) => {
