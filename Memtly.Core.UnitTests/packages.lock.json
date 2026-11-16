@@ -994,6 +994,20 @@
           "Xabe.FFmpeg": "[6.0.2, )",
           "Xabe.FFmpeg.Downloader": "[6.0.2, )"
         }
+      },
+      "memtly.core.migrations.mysql": {
+        "type": "Project",
+        "dependencies": {
+          "Memtly.Core": "[1.0.0, )",
+          "Pomelo.EntityFrameworkCore.MySql": "[9.0.0, )"
+        }
+      },
+      "memtly.core.migrations.sqlite": {
+        "type": "Project",
+        "dependencies": {
+          "Memtly.Core": "[1.0.0, )",
+          "Microsoft.EntityFrameworkCore.Sqlite": "[9.0.19, )"
+        }
       }
     },
     "net10.0/linux-arm": {

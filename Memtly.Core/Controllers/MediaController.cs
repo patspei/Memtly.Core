@@ -19,7 +19,7 @@ public sealed class MediaController(IDatabaseHelper database, IMediaAccessHelper
         if (item == null || !await access.CanDownload(HttpContext, item)) return NotFound();
         var gallery = await database.GetGallery(item.GalleryId);
         var path = gallery == null ? null : files.GetPath(gallery, item);
-        return path == null ? NotFound() : Json(new { count = 1, bytes = new FileInfo(path).Length, filename = item.Title });
+        return path == null ? NotFound() : Json(new { count = 1, bytes = new FileInfo(path).Length, filename = MediaFileName.DownloadName(item) });
     }
     [HttpGet("/Media/Original/{id:int}")]
     [HttpHead("/Media/Original/{id:int}")]
@@ -55,7 +55,7 @@ public sealed class MediaController(IDatabaseHelper database, IMediaAccessHelper
         if (!provider.TryGetContentType(path, out var contentType)) contentType = "application/octet-stream";
         if ((!contentType.StartsWith("image/", StringComparison.Ordinal) && !contentType.StartsWith("video/", StringComparison.Ordinal)) ||
             contentType == "image/svg+xml") contentType = "application/octet-stream";
-        return PhysicalFile(path, contentType, download ? item.Title : null, enableRangeProcessing: true);
+        return PhysicalFile(path, contentType, download ? MediaFileName.DownloadName(item) : null, enableRangeProcessing: true);
     }
 
     [HttpGet("/Media/CustomResourceThumbnail/{id:int}")]

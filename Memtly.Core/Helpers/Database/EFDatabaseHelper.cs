@@ -494,6 +494,7 @@ namespace Memtly.Core.Helpers.Database
                     GalleryName = gi.Gallery!.Name,
                     UserId = gi.UserId,
                     Title = gi.Title,
+                    OriginalFileName = gi.OriginalFileName,
                     State = gi.State,
                     UploadedBy = gi.UploadedBy,
                     UploaderEmailAddress = gi.UploaderEmailAddress,
@@ -518,6 +519,7 @@ namespace Memtly.Core.Helpers.Database
                     GalleryName = gi.Gallery!.Name,
                     UserId = gi.UserId,
                     Title = gi.Title,
+                    OriginalFileName = gi.OriginalFileName,
                     State = gi.State,
                     UploadedBy = gi.UploadedBy,
                     UploaderEmailAddress = gi.UploaderEmailAddress,
@@ -544,6 +546,7 @@ namespace Memtly.Core.Helpers.Database
                     GalleryName = gi.Gallery!.Name,
                     UserId = gi.UserId,
                     Title = gi.Title,
+                    OriginalFileName = gi.OriginalFileName,
                     State = gi.State,
                     UploadedBy = gi.UploadedBy,
                     UploaderEmailAddress = gi.UploaderEmailAddress,
@@ -564,6 +567,7 @@ namespace Memtly.Core.Helpers.Database
                 GalleryId = model.GalleryId,
                 UserId = model.UserId,
                 Title = model.Title.GetDbSafeValue(),
+                OriginalFileName = MediaFileName.Normalize(model.OriginalFileName),
                 State = model.State,
                 UploadedBy = model.UploadedBy?.GetDbSafeValue() ?? string.Empty,
                 UploaderEmailAddress = model.UploaderEmailAddress?.GetDbSafeValue() ?? string.Empty,
@@ -587,6 +591,7 @@ namespace Memtly.Core.Helpers.Database
             if (galleryItem != null)
             {
                 galleryItem.Title = model.Title.GetDbSafeValue();
+                galleryItem.OriginalFileName = MediaFileName.Normalize(model.OriginalFileName);
                 galleryItem.State = model.State;
                 galleryItem.UploadedBy = model.UploadedBy?.GetDbSafeValue() ?? string.Empty;
                 galleryItem.UploaderEmailAddress = model.UploaderEmailAddress?.GetDbSafeValue() ?? string.Empty;

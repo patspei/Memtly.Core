@@ -498,7 +498,11 @@ namespace Memtly.Core.Controllers
                     {
                         if (request.File != null)
                         {
-                            var extension = Path.GetExtension(request.File.FileName);
+                            using var uploadLock = await UploadSnapshot.Acquire(HttpContext, request);
+                            var originalFileName = MediaFileName.Normalize(request.File.FileName);
+                            if (originalFileName == null)
+                                return Json(new MediaUploadFailureResponse(request.RequestId, request.UploadId, "Ungültiger Dateiname."));
+                            var extension = Path.GetExtension(originalFileName);
                             var maxGallerySize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxSizeMB, 1024L, collection?.Id ?? gallery.Id) * 1000000;
                             var maxFilesSize = await _settings.GetOrDefault(MemtlyConfiguration.Gallery.MaxFileSizeMB, 50L, collection?.Id ?? gallery.Id) * 1000000;
                             var isDemoMode = await _settings.GetOrDefault(MemtlyConfiguration.IsDemoMode, false);
@@ -533,6 +537,7 @@ namespace Memtly.Core.Controllers
                                 if (request.TotalChunks > 1 && !isDemoMode)
                                 {
                                     var snapshot = UploadSnapshot.Capture(TempDirectory, chunkPrefix, request, uploadedBy, uploaderEmail);
+                                    originalFileName = MediaFileName.Normalize(snapshot.Filename)!;
                                     uploadedBy = snapshot.Name;
                                     uploaderEmail = snapshot.Email;
                                 }
@@ -556,19 +561,19 @@ namespace Memtly.Core.Controllers
 
                                 _fileHelper.CreateDirectoryIfNotExists(galleryPath);
                                 
-                                var finalFileName = _fileHelper.SanitizeFilename($"{(!string.IsNullOrWhiteSpace(uploadedBy) ? $"{uploadedBy.Replace(" ", "_")}-" : string.Empty)}{Guid.NewGuid()}{Path.GetExtension(request.File.FileName)}");
+                                var finalFileName = $"{Guid.NewGuid()}{extension}";
                                 var finalFilePath = Path.Combine(galleryPath, finalFileName);
 
                                 if (request.TotalChunks == 1 || isDemoMode)
                                 {
                                     if (!isDemoMode)
                                     {
-                                        await _fileHelper.SaveFile(request.File, finalFilePath, FileMode.Create);
+                                        await _fileHelper.SaveFile(request.File, finalFilePath, FileMode.CreateNew);
                                     }
                                     else
                                     {
                                         var mediaType = _imageHelper.GuessMediaTypeFromExtension(request.File.FileName);
-                                        System.IO.File.Copy(Path.Combine(AssetsDirectory, (mediaType == MediaType.Video ? $"DemoVideo.mp4" : $"DemoImage.png")), finalFilePath, true);
+                                        System.IO.File.Copy(Path.Combine(AssetsDirectory, (mediaType == MediaType.Video ? $"DemoVideo.mp4" : $"DemoImage.png")), finalFilePath, false);
                                     }
                                 }
                                 else
@@ -589,7 +594,7 @@ namespace Memtly.Core.Controllers
                                     }
                                     if (uploadedChunks.Count() == request.TotalChunks)
                                     {
-                                        await using (var output = System.IO.File.Create(finalFilePath))
+                                        await using (var output = new FileStream(finalFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                                         {
                                             for (var i = 0; i < request.TotalChunks; i++)
                                             {
@@ -662,6 +667,7 @@ namespace Memtly.Core.Controllers
                                         GalleryName = gallery.Name,
                                         UserId = loggedInUser?.Id,
                                         Title = finalFileName,
+                                        OriginalFileName = originalFileName,
                                         UploadedBy = uploadedBy,
                                         UploaderEmailAddress = uploaderEmail,
                                         UploadedDate = DateTimeOffset.UtcNow,

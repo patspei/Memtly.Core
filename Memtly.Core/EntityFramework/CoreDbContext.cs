@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Memtly.Core.EntityFramework.Models;
 using Memtly.Core.Enums;
 
@@ -105,6 +105,7 @@ namespace Memtly.Core.EntityFramework
             mb.Entity<GalleryItem>(e =>
             {
                 e.Property(x => x.Title).HasMaxLength(500);
+                e.Property(x => x.OriginalFileName).HasMaxLength(500);
                 e.Property(x => x.UploadedBy).HasMaxLength(100);
                 e.Property(x => x.UploaderEmailAddress).HasMaxLength(500);
                 e.Property(x => x.Checksum).HasMaxLength(1000);

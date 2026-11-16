@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Memtly.Core\Memtly.Core.csproj" />
+    <ProjectReference Include="..\Memtly.Core.Migrations.MySql\Memtly.Core.Migrations.MySql.csproj" />
+    <ProjectReference Include="..\Memtly.Core.Migrations.Sqlite\Memtly.Core.Migrations.Sqlite.csproj" />
   </ItemGroup>
 
 </Project>

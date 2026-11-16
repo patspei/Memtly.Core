@@ -1,4 +1,4 @@
-﻿using Memtly.Core.Enums;
+using Memtly.Core.Enums;
 
 namespace Memtly.Core.EntityFramework.Models
 {
@@ -10,6 +10,7 @@ namespace Memtly.Core.EntityFramework.Models
         public int? UserId { get; set; }
         public User? User { get; set; }
         public string Title { get; set; } = string.Empty;
+        public string? OriginalFileName { get; set; }
         public string UploadedBy { get; set; } = string.Empty;
         public string UploaderEmailAddress { get; set; } = string.Empty;
         public string Checksum { get; set; } = string.Empty;

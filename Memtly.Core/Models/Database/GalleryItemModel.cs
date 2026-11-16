@@ -1,4 +1,4 @@
-﻿using Memtly.Core.Enums;
+using Memtly.Core.Enums;
 
 namespace Memtly.Core.Models.Database
 {
@@ -31,7 +31,9 @@ namespace Memtly.Core.Models.Database
         public int GalleryId { get; set; }
         public string GalleryName { get; set; }
         public int? UserId { get; set; }
+        // Title remains the unique physical storage filename.
         public string Title { get; set; }
+        public string? OriginalFileName { get; set; }
         public string? UploadedBy { get; set; }
         public string? UploaderEmailAddress { get; set; }
         public DateTimeOffset UploadedDate { get; set; }

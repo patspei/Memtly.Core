@@ -15,7 +15,7 @@ namespace Memtly.Core.Migrations.Sqlite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.18");
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.19");
 
             modelBuilder.Entity("Memtly.Core.EntityFramework.Models.AuditLog", b =>
                 {
@@ -234,6 +234,10 @@ namespace Memtly.Core.Migrations.Sqlite.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(0);
+
+                    b.Property<string>("OriginalFileName")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("State")
                         .ValueGeneratedOnAdd()

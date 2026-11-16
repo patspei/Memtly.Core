@@ -54,7 +54,9 @@ public sealed class GalleryDownloadHelper(IDatabaseHelper database, IMediaAccess
                     items.Add(legacy);
         }
         var listing = new List<ZipListing>();
-        foreach (var item in items)
+        foreach (var item in items.OrderBy(i => i.GalleryId).ThenBy(i => i.State)
+            .ThenBy(MediaFileName.DownloadName, NaturalFileNameComparer.Instance)
+            .ThenBy(i => i.Id).ThenBy(i => i.Title, StringComparer.Ordinal))
         {
             if (!byId.TryGetValue(item.GalleryId, out var source) || !await access.CanDownload(context, item)) continue;
             if (filter != null && !filter.Contains(item.Title)) continue;
@@ -72,7 +74,8 @@ public sealed class GalleryDownloadHelper(IDatabaseHelper database, IMediaAccess
             var path = files.GetPath(source, item);
             if (path == null) continue;
             var directory = scope.Count > 1 ? $"{source.Identifier}/{item.State}" : item.State.ToString();
-            listing.Add(new ZipListing(Path.GetDirectoryName(path)!, [path], directory));
+            listing.Add(new ZipListing(Path.GetDirectoryName(path)!, [path], directory,
+                entryNames: new Dictionary<string, string> { [path] = MediaFileName.DownloadName(item) }));
         }
         if (listing.Count == 0) return Denied(404);
         var identifier = GalleryHelper.IsValidGalleryIdentifier(gallery.Identifier) ? gallery.Identifier : "Memtly";

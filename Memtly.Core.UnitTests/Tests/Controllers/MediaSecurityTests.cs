@@ -446,6 +446,36 @@ public class MediaSecurityTests
         Assert.That(await client.GetStringAsync("/Media/Thumbnail/1"), Is.EqualTo("THUMB-APPROVED-PUBLIC"));
     }
 
+    [TestCase("DSC_0042.JPG")]
+    [TestCase("Julia & Patrick – Grüße 你好.JPG")]
+    [TestCase("Video 9.MOV")]
+    [TestCase(null)]
+    public async Task OriginalNameReachesHttpMetadataUtf8HeadersAndBothZipRoutes(string? originalName)
+    {
+        var item = items.Single(i => i.Id == 1);
+        try
+        {
+            item.OriginalFileName = originalName;
+            var expected = originalName ?? item.Title;
+            using var client = Client();
+            var response = await client.GetAsync("/Media/Original/1?download=true");
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(response.Content.Headers.ContentDisposition!.FileNameStar, Is.EqualTo(expected));
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            Assert.That(System.Security.Cryptography.SHA256.HashData(bytes), Is.EqualTo(
+                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("APPROVED-PUBLIC"))));
+            var info = System.Text.Json.JsonDocument.Parse(await client.GetStringAsync("/Media/DownloadInfo/1"));
+            Assert.That(info.RootElement.GetProperty("filename").GetString(), Is.EqualTo(expected));
+            foreach (var selected in new[] { false, true })
+            {
+                var zip = await Zip(selected ? await Download(client, 1, ("fileFilter[0]", item.Title)) : await Download(client));
+                Assert.That(zip.Keys, Is.EqualTo(new[] { "Approved/" + expected }));
+                Assert.That(zip.Values.Single(), Is.EqualTo("APPROVED-PUBLIC"));
+            }
+        }
+        finally { item.OriginalFileName = null; }
+    }
+
     [Test]
     public async Task KeyProtectedMediaRequiresGrantAndGrantIsRevokedOnKeyChange()
     {

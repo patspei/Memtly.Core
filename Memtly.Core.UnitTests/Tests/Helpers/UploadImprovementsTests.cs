@@ -38,6 +38,9 @@ public class UploadImprovementsTests
         var original = UploadSnapshot.Capture(directory, prefix, request, "First name", "");
         request.ChunkIndex = 1;
         Assert.That(UploadSnapshot.Capture(directory, prefix, request, "Changed in another tab", "").Name, Is.EqualTo(original.Name));
+        request.File = new FormFile(Stream.Null, 0, 10, "File", "different-name.heic");
+        Assert.Throws<InvalidDataException>(() => UploadSnapshot.Capture(directory, prefix, request, "", ""));
+        request.File = new FormFile(Stream.Null, 0, 10, "File", "photo.heic");
         request.TotalChunks = 3;
         Assert.Throws<InvalidDataException>(() => UploadSnapshot.Capture(directory, prefix, request, "", ""));
         request.GalleryId = 3;
